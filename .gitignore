@@ -1,0 +1,51 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.vercel
+
+# Secretos / configuración local (contiene tokens reales - NUNCA subir)
+.claude/settings.local.json
+
+# Exports de datos reales de producción (no subir datos de animales)
+TABLAS SUPABASE*/
+
+# Scripts de depuración puntuales y archivos de respaldo/prueba ad-hoc
+*.cjs
+src/App_broken.jsx
+src/App_broken2.jsx
+src/App_recovered.jsx
+app_jsx_dump.jsx
+test_app.jsx
+test_app_clean.jsx
+test_app_no_modal.jsx
+test_top_dump.jsx
+excel_clean.txt
+eslint_output*.txt
+excel_content.txt
+import_operario.json
+read_excel.js
+test_section.jsx
+test_table.jsx
+*.xlsx

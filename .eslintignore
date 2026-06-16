@@ -1,0 +1,16 @@
+App_*.jsx
+test_*.jsx
+test_*.cjs
+fix_*.cjs
+check_*.cjs
+read_*.cjs
+dump_*.cjs
+foo.cjs
+recover.cjs
+repair_*.cjs
+split.cjs
+track_parens.cjs
+excel_*.txt
+eslint_output*.txt
+Renacuajos Registros.xlsx
+app_jsx_dump.jsx
