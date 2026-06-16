@@ -8,6 +8,25 @@ const normalizarId = (id) => {
   return String(id).replace(/[^a-zA-Z0-9\-\.]/g, "");
 };
 
+// Icono y clase CSS del bloqueo según su motivo, para distinguir
+// visualmente desinfección/limpieza de un bloqueo genérico o de reparación.
+const lockIcon = (obs) => {
+  if (!obs || !obs.includes("[BLOQUEADO")) return "";
+  const motivo = (obs.match(/\[BLOQUEADO(?:[:-]?\s*(.*?))?\]/) || [])[1] || "";
+  const m = motivo.toLowerCase();
+  if (m.includes("desinfec") || m.includes("limpi")) return "🧴";
+  if (m.includes("repara")) return "🔧";
+  return "🔒";
+};
+const lockClass = (obs) => {
+  if (!obs || !obs.includes("[BLOQUEADO")) return "";
+  const motivo = (obs.match(/\[BLOQUEADO(?:[:-]?\s*(.*?))?\]/) || [])[1] || "";
+  const m = motivo.toLowerCase();
+  if (m.includes("desinfec") || m.includes("limpi")) return "locked desinfectar";
+  if (m.includes("repara")) return "locked reparar";
+  return "locked";
+};
+
 // Parsear y serializar desglose de subgrupos (sexo, estado, fechas)
 const parseSubgrupos = (obs) => {
   if (!obs) return { subgrupos: [], comentario: "" };
@@ -4550,13 +4569,13 @@ function App() {
               return (
                 <div
                   key={cell.id}
-                  className={`grid-cell ${dens.estado} ${cell?.obs?.includes("[BLOQUEADO") ? "locked" : ""}`}
+                  className={`grid-cell ${dens.estado} ${lockClass(cell?.obs)}`}
                   onClick={() => {
                     handleCellClick(cell, "metamorfoseadas");
                   }}
                 >
                   <div className="cell-id">
-                    {cell.id} {cell?.obs?.includes("[BLOQUEADO") ? "🔒" : ""}
+                    {cell.id} {lockIcon(cell?.obs)}
                   </div>
                   <div className="cell-count">
                     {cell.count > 0 ? `${cell.count} ud` : "-"}
@@ -4597,13 +4616,13 @@ function App() {
               return (
                 <div
                   key={cell.id}
-                  className={`grid-cell ${dens.estado} ${cell?.obs?.includes("[BLOQUEADO") ? "locked" : ""}`}
+                  className={`grid-cell ${dens.estado} ${lockClass(cell?.obs)}`}
                   onClick={() => {
                     handleCellClick(cell, "metamorfoseadas");
                   }}
                 >
                   <div className="cell-id">
-                    {cell.id} {cell?.obs?.includes("[BLOQUEADO") ? "🔒" : ""}
+                    {cell.id} {lockIcon(cell?.obs)}
                   </div>
                   <div className="cell-count">
                     {cell.count > 0 ? `${cell.count} ud` : "-"}
@@ -4685,13 +4704,13 @@ function App() {
                 return (
                   <div
                     key={cell.id}
-                    className={`grid-cell ${dens.estado} ${cell?.obs?.includes("[BLOQUEADO") ? "locked" : ""}`}
+                    className={`grid-cell ${dens.estado} ${lockClass(cell?.obs)}`}
                     onClick={() => {
                       handleCellClick(cell, "naveVerde");
                     }}
                   >
                     <div className="cell-id">
-                      {cell.id} {cell?.obs?.includes("[BLOQUEADO") ? "🔒" : ""}
+                      {cell.id} {lockIcon(cell?.obs)}
                     </div>
                     <div className="cell-count">
                       {cell.count > 0 ? `${cell.count} ud` : "-"}
@@ -4727,13 +4746,13 @@ function App() {
               return (
                 <div
                   key={cell.id}
-                  className={`grid-cell ${dens.estado} corral-cell ${cell?.obs?.includes("[BLOQUEADO") ? "locked" : ""}`}
+                  className={`grid-cell ${dens.estado} corral-cell ${lockClass(cell?.obs)}`}
                   onClick={() => {
                     handleCellClick(cell, "naveVerde");
                   }}
                 >
                   <div className="cell-id">
-                    {cell.id} {cell?.obs?.includes("[BLOQUEADO") ? "🔒" : ""}
+                    {cell.id} {lockIcon(cell?.obs)}
                   </div>
                   <div className="cell-count">
                     {cell.count > 0 ? `${cell.count} ud` : "-"}
@@ -4772,13 +4791,13 @@ function App() {
                 return (
                   <div
                     key={cell.id}
-                    className={`grid-cell ${dens.estado} ${cell?.obs?.includes("[BLOQUEADO") ? "locked" : ""}`}
+                    className={`grid-cell ${dens.estado} ${lockClass(cell?.obs)}`}
                     onClick={() => {
                       handleCellClick(cell, "naveVerde");
                     }}
                   >
                     <div className="cell-id">
-                      {cell.id} {cell?.obs?.includes("[BLOQUEADO") ? "🔒" : ""}
+                      {cell.id} {lockIcon(cell?.obs)}
                     </div>
                     <div className="cell-count">
                       {cell.count > 0 ? `${cell.count} ud` : "-"}
@@ -4816,13 +4835,13 @@ function App() {
                   return (
                     <div
                       key={der.id}
-                      className={`grid-cell ${dens.estado} ${der?.obs?.includes("[BLOQUEADO") ? "locked" : ""}`}
+                      className={`grid-cell ${dens.estado} ${lockClass(der?.obs)}`}
                       onClick={() => {
                         handleCellClick(der, "naveVerde");
                       }}
                     >
                       <div className="cell-id">
-                        {der.id} {der?.obs?.includes("[BLOQUEADO") ? "🔒" : ""}
+                        {der.id} {lockIcon(der?.obs)}
                       </div>
                       <div className="cell-count">
                         {der.count > 0 ? `${der.count} ud` : "-"}
@@ -4857,7 +4876,7 @@ function App() {
                   return (
                     <div
                       key={caja.id}
-                      className={`grid-cell ${dens.estado} caja-blanca ${caja?.obs?.includes("[BLOQUEADO") ? "locked" : ""}`}
+                      className={`grid-cell ${dens.estado} caja-blanca ${lockClass(caja?.obs)}`}
                       onClick={() => {
                         handleCellClick(caja, "naveVerde");
                       }}
@@ -5237,13 +5256,13 @@ function App() {
               return (
                 <div
                   key={cell.id}
-                  className={`grid-cell ${dens.estado} ${cell?.obs?.includes("[BLOQUEADO") ? "locked" : ""}`}
+                  className={`grid-cell ${dens.estado} ${lockClass(cell?.obs)}`}
                   onClick={() => {
                     handleCellClick(cell, "adultas");
                   }}
                 >
                   <div className="cell-id">
-                    {cell.id} {cell?.obs?.includes("[BLOQUEADO") ? "🔒" : ""}
+                    {cell.id} {lockIcon(cell?.obs)}
                   </div>
                   <div className="cell-count">
                     {cell.count > 0 ? `${cell.count} ud` : "-"}
@@ -5283,13 +5302,13 @@ function App() {
               return (
                 <div
                   key={cell.id}
-                  className={`grid-cell ${dens.estado} ${cell?.obs?.includes("[BLOQUEADO") ? "locked" : ""}`}
+                  className={`grid-cell ${dens.estado} ${lockClass(cell?.obs)}`}
                   onClick={() => {
                     handleCellClick(cell, "adultas");
                   }}
                 >
                   <div className="cell-id">
-                    {cell.id} {cell?.obs?.includes("[BLOQUEADO") ? "🔒" : ""}
+                    {cell.id} {lockIcon(cell?.obs)}
                   </div>
                   <div className="cell-count">
                     {cell.count > 0 ? `${cell.count} ud` : "-"}
@@ -5353,6 +5372,8 @@ function App() {
                 cellClass += " locked";
                 if (lockReason.toLowerCase().includes("repara")) {
                   cellClass += " reparar";
+                } else if (lockReason.toLowerCase().includes("desinfec") || lockReason.toLowerCase().includes("limpi")) {
+                  cellClass += " desinfectar";
                 }
               }
               
@@ -5385,14 +5406,14 @@ function App() {
                   }
                 >
                   <span className="grid-cell-id">
-                    {fila}-{col} {isLocked && (lockReason.toLowerCase().includes("repara") ? "🔧" : "🔒")}
+                    {fila}-{col} {isLocked && lockIcon(cell?.obs)}
                   </span>
                   {isLocked && (
                     <span
                       style={{
                         fontSize: "0.6rem",
                         color: "#fff",
-                        background: lockReason.toLowerCase().includes("repara") ? "#d35400" : "#c23616",
+                        background: lockReason.toLowerCase().includes("repara") ? "#d35400" : lockReason.toLowerCase().includes("desinfec") || lockReason.toLowerCase().includes("limpi") ? "#0984e3" : "#c23616",
                         padding: "2px 4px",
                         borderRadius: "4px",
                         marginTop: "2px",
@@ -5401,7 +5422,7 @@ function App() {
                         display: "block",
                       }}
                     >
-                      {lockReason.toLowerCase().includes("repara") ? "🔧 REPARAR" : lockReason}
+                      {lockReason.toLowerCase().includes("repara") ? "🔧 REPARAR" : lockReason.toLowerCase().includes("desinfec") || lockReason.toLowerCase().includes("limpi") ? "🧴 " + lockReason.toUpperCase() : lockReason}
                     </span>
                   )}
                   {esOcupada ? (
@@ -6276,7 +6297,7 @@ function App() {
                     >
                       <div className="cell-id">
                         {cell.id}{" "}
-                        {cell?.obs?.includes("[BLOQUEADO") ? "🔒" : ""}
+                        {lockIcon(cell?.obs)}
                       </div>
                       <div
                         className="cell-count"
@@ -9006,6 +9027,15 @@ function App() {
                       <option value="Reparación">Reparación</option>
                       <option value="Otros">Otros...</option>
                     </select>
+                  )}
+                  {modalObs && modalObs.includes("[BLOQUEADO") && (
+                    <span style={{
+                      fontSize: "0.78rem", fontWeight: "bold", padding: "0.3rem 0.6rem", borderRadius: "4px",
+                      background: lockIcon(modalObs) === "🧴" ? "#e8f4fd" : lockIcon(modalObs) === "🔧" ? "#fdf0e0" : "#fdecea",
+                      color: lockIcon(modalObs) === "🧴" ? "#0984e3" : lockIcon(modalObs) === "🔧" ? "#d35400" : "#c23616",
+                    }}>
+                      {lockIcon(modalObs)} {(modalObs.match(/\[BLOQUEADO(?:[:-]?\s*(.*?))?\]/) || [])[1] || "Bloqueado"}
+                    </span>
                   )}
                   <button
                     style={{

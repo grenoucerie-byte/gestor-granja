@@ -716,6 +716,21 @@ input:focus, textarea:focus {
   color: #d35400;
 }
 
+.grid-cell.locked.desinfectar {
+  border-color: #0984e3;
+  background-image: repeating-linear-gradient(
+    45deg,
+    #f4fbff,
+    #f4fbff 10px,
+    #e8f4fd 10px,
+    #e8f4fd 20px
+  );
+}
+
+.grid-cell.locked.desinfectar .cell-id, .grid-cell.locked.desinfectar .grid-cell-id {
+  color: #0984e3;
+}
+
 .grid-cell.locked .cell-id, .grid-cell.locked .grid-cell-id {
   color: #c23616;
 }
