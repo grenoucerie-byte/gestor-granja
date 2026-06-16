@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "./index.css";
 import ReportesExportar from "./components/ReportesExportar";
 
@@ -1069,6 +1069,8 @@ function App() {
   const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [cloudSaveError, setCloudSaveError] = useState(null); // { msg, detail } si falla un POST
+  // Caché en memoria: codigo de tanque -> ubicacion_id (uuid). Las ubicaciones casi no cambian.
+  const ubicacionIdCacheRef = useRef({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importModalText, setImportModalText] = useState("");
@@ -1551,6 +1553,16 @@ function App() {
 
         await guardarTratamientoEnNube(movOrigen, "traslado con pesaje");
         await guardarTratamientoEnNube(movDestino, "traslado con pesaje");
+
+        if (itemDestino.count > 0) {
+          console.warn(`Traslado a destino ya ocupado (${cleanDestinoId}): se omite la actualización de lote para evitar mezclar lotes.`);
+        } else {
+          await procesarTrasladoLote({
+            tanqueOrigenId: cleanOrigenId, grupoOrigen: origenGrupo, loteIdLocalOrigen: itemOrigen.lote_id,
+            tanqueDestinoId: cleanDestinoId, grupoDestino: destinoGrupo,
+            esCompleto: nuevoCountOrigen <= 0, motivo,
+          });
+        }
       } catch (err) {
         console.error("Error al registrar traslado con pesaje en la nube", err);
         setCloudSaveError(`Error al registrar traslado con pesaje: ${err.message}`);
@@ -1724,6 +1736,19 @@ function App() {
 
         await guardarTratamientoEnNube(movOrigen, "traslado");
         await guardarTratamientoEnNube(movDestino, "traslado");
+
+        // Si el destino ya tenía animales de otro lote, no se puede fusionar
+        // de forma fiable con el modelo actual (un lote activo por ubicación);
+        // se omite la parte normalizada y se deja constancia en consola.
+        if (itemDestino.count > 0) {
+          console.warn(`Traslado a destino ya ocupado (${idDestinoExacto}): se omite la actualización de lote para evitar mezclar lotes.`);
+        } else {
+          await procesarTrasladoLote({
+            tanqueOrigenId: idOrigenExacto, grupoOrigen: origenGrupo, loteIdLocalOrigen: itemOrigen.lote_id,
+            tanqueDestinoId: idDestinoExacto, grupoDestino: destinoGrupo,
+            esCompleto: nuevoCountOrigen <= 0, motivo,
+          });
+        }
       } catch (err) {
         console.error("Error al registrar traslado en la nube", err);
         setCloudSaveError(`Error al registrar traslado: ${err.message}`);
@@ -2917,6 +2942,216 @@ function App() {
     }
   };
 
+  // Resuelve el uuid de `ubicaciones` a partir del código de tanque (ej. "2.1.3"),
+  // con caché en memoria ya que las ubicaciones casi nunca cambian.
+  const resolverUbicacionId = async (tanqueId) => {
+    const codigo = normalizarId(tanqueId);
+    if (!codigo) return null;
+    if (codigo in ubicacionIdCacheRef.current) return ubicacionIdCacheRef.current[codigo];
+    try {
+      const res = await fetch(
+        `${cloudConfig.url}/rest/v1/ubicaciones?codigo=eq.${encodeURIComponent(codigo)}&select=id`,
+        { headers: obtenerCabeceras() },
+      );
+      if (!res.ok) { ubicacionIdCacheRef.current[codigo] = null; return null; }
+      const rows = await res.json();
+      const id = rows[0]?.id || null;
+      ubicacionIdCacheRef.current[codigo] = id;
+      return id;
+    } catch (err) {
+      console.error("Error al resolver ubicación:", err);
+      return null;
+    }
+  };
+
+  // Devuelve el lote_id vigente de un tanque, creándolo si aún no existe.
+  // loteIdLocal: si ya conocemos el lote_id de esta celda (cell.lote_id), se evita la consulta.
+  const obtenerOCrearLote = async (tanqueId, grupo, loteIdLocal = null) => {
+    if (loteIdLocal) return loteIdLocal;
+
+    const ubicacionId = await resolverUbicacionId(tanqueId);
+    if (!ubicacionId) {
+      console.warn(`No se encontró ubicación para "${tanqueId}"; no se podrá enlazar el lote.`);
+      return null;
+    }
+
+    try {
+      // Buscar un lote activo ya existente en esta ubicación
+      const resBuscar = await fetch(
+        `${cloudConfig.url}/rest/v1/lotes?ubicacion_id=eq.${ubicacionId}&activo=eq.true&select=id&order=fecha_alta.desc&limit=1`,
+        { headers: obtenerCabeceras() },
+      );
+      if (resBuscar.ok) {
+        const encontrados = await resBuscar.json();
+        if (encontrados[0]?.id) {
+          await actualizarLoteIdEnCenso(tanqueId, encontrados[0].id);
+          return encontrados[0].id;
+        }
+      }
+
+      // No existe: crear uno nuevo en esa ubicación
+      const resCrear = await fetch(`${cloudConfig.url}/rest/v1/lotes`, {
+        method: "POST",
+        headers: { ...obtenerCabeceras(), Prefer: "return=representation" },
+        body: JSON.stringify({
+          nombre: `Lote_${grupo}_${normalizarId(tanqueId)}`,
+          ubicacion_id: ubicacionId,
+          activo: true,
+          fecha_alta: new Date().toISOString().split("T")[0],
+        }),
+      });
+      if (!resCrear.ok) {
+        console.error("Error al crear lote:", await resCrear.text());
+        return null;
+      }
+      const creados = await resCrear.json();
+      const nuevoLoteId = creados[0]?.id || null;
+      if (nuevoLoteId) await actualizarLoteIdEnCenso(tanqueId, nuevoLoteId);
+      return nuevoLoteId;
+    } catch (err) {
+      console.error("Error al resolver/crear lote:", err);
+      return null;
+    }
+  };
+
+  // Guarda el lote_id resuelto en censos para no tener que repetir la búsqueda la próxima vez.
+  const actualizarLoteIdEnCenso = async (tanqueId, loteId) => {
+    try {
+      await fetch(`${cloudConfig.url}/rest/v1/censos?id=eq.${encodeURIComponent(normalizarId(tanqueId))}`, {
+        method: "PATCH",
+        headers: obtenerCabeceras(),
+        body: JSON.stringify({ lote_id: loteId }),
+      });
+    } catch (err) {
+      console.error("Error al guardar lote_id en censo:", err);
+    }
+  };
+
+  // Mueve un lote a una nueva ubicación (traslado completo) y registra el movimiento.
+  const moverLoteCompleto = async (loteId, ubicacionOrigenId, ubicacionDestinoId, motivo) => {
+    try {
+      await fetch(`${cloudConfig.url}/rest/v1/lotes?id=eq.${loteId}`, {
+        method: "PATCH",
+        headers: obtenerCabeceras(),
+        body: JSON.stringify({ ubicacion_id: ubicacionDestinoId }),
+      });
+      await fetch(`${cloudConfig.url}/rest/v1/movimientos_lote`, {
+        method: "POST",
+        headers: obtenerCabeceras(),
+        body: JSON.stringify({
+          lote_id: loteId,
+          ubicacion_origen_id: ubicacionOrigenId,
+          ubicacion_destino_id: ubicacionDestinoId,
+          fecha: new Date().toISOString().split("T")[0],
+          motivo: motivo || "",
+        }),
+      });
+    } catch (err) {
+      console.error("Error al registrar movimiento de lote:", err);
+    }
+  };
+
+  // Traslado parcial: el lote origen permanece (con menos unidades), se crea
+  // un lote nuevo en destino enlazado como hijo del origen (lote_origen_id).
+  const crearLoteHijoEnDestino = async (loteOrigenId, ubicacionOrigenId, ubicacionDestinoId, tanqueDestinoId, grupoDestino, motivo) => {
+    try {
+      const resCrear = await fetch(`${cloudConfig.url}/rest/v1/lotes`, {
+        method: "POST",
+        headers: { ...obtenerCabeceras(), Prefer: "return=representation" },
+        body: JSON.stringify({
+          nombre: `Lote_${grupoDestino}_${normalizarId(tanqueDestinoId)}`,
+          ubicacion_id: ubicacionDestinoId,
+          lote_origen_id: loteOrigenId,
+          activo: true,
+          fecha_alta: new Date().toISOString().split("T")[0],
+        }),
+      });
+      if (!resCrear.ok) { console.error("Error al crear lote hijo:", await resCrear.text()); return null; }
+      const creados = await resCrear.json();
+      const nuevoLoteId = creados[0]?.id || null;
+      if (nuevoLoteId) {
+        await actualizarLoteIdEnCenso(tanqueDestinoId, nuevoLoteId);
+        await fetch(`${cloudConfig.url}/rest/v1/movimientos_lote`, {
+          method: "POST",
+          headers: obtenerCabeceras(),
+          body: JSON.stringify({
+            lote_id: nuevoLoteId,
+            ubicacion_origen_id: ubicacionOrigenId,
+            ubicacion_destino_id: ubicacionDestinoId,
+            fecha: new Date().toISOString().split("T")[0],
+            motivo: motivo || "",
+          }),
+        });
+      }
+      return nuevoLoteId;
+    } catch (err) {
+      console.error("Error al crear lote hijo en destino:", err);
+      return null;
+    }
+  };
+
+  // Registra un traslado en el modelo normalizado: resuelve/crea el lote de
+  // origen y, según si se mueve todo el conteo o solo una parte, mueve el
+  // lote completo a la nueva ubicación o crea un lote hijo en destino.
+  const procesarTrasladoLote = async ({ tanqueOrigenId, grupoOrigen, loteIdLocalOrigen, tanqueDestinoId, grupoDestino, esCompleto, motivo }) => {
+    try {
+      const [ubicacionOrigenId, ubicacionDestinoId] = await Promise.all([
+        resolverUbicacionId(tanqueOrigenId),
+        resolverUbicacionId(tanqueDestinoId),
+      ]);
+      if (!ubicacionOrigenId || !ubicacionDestinoId) {
+        console.warn(`No se pudo resolver ubicación de origen/destino para el traslado ${tanqueOrigenId} -> ${tanqueDestinoId}.`);
+        return;
+      }
+      const loteId = await obtenerOCrearLote(tanqueOrigenId, grupoOrigen, loteIdLocalOrigen);
+      if (!loteId) return;
+
+      if (esCompleto) {
+        await moverLoteCompleto(loteId, ubicacionOrigenId, ubicacionDestinoId, motivo);
+        await actualizarLoteIdEnCenso(tanqueDestinoId, loteId);
+        await actualizarLoteIdEnCenso(tanqueOrigenId, null);
+      } else {
+        await crearLoteHijoEnDestino(loteId, ubicacionOrigenId, ubicacionDestinoId, tanqueDestinoId, grupoDestino, motivo);
+      }
+    } catch (err) {
+      console.error("Error al procesar traslado de lote:", err);
+    }
+  };
+
+  // Registra una baja (mortalidad o salida a industria) en la tabla normalizada
+  // `bajas`, resolviendo/creando el lote si hace falta.
+  const guardarBajaEnNube = async ({ tanqueId, grupo, cantidad, categoria, causa, tipoSalida, destino, loteIdLocal = null }) => {
+    try {
+      const loteId = await obtenerOCrearLote(tanqueId, grupo, loteIdLocal);
+      if (!loteId) {
+        setCloudSaveError(`Aviso: se guardó en el historial pero no se pudo enlazar a un lote (sin ubicación reconocida para "${tanqueId}").`);
+        return false;
+      }
+      const res = await fetch(`${cloudConfig.url}/rest/v1/bajas`, {
+        method: "POST",
+        headers: obtenerCabeceras(),
+        body: JSON.stringify({
+          lote_id: loteId,
+          fecha: new Date().toISOString().split("T")[0],
+          cantidad,
+          categoria: categoria || "Mortalidad",
+          tipo_salida: tipoSalida || null,
+          destino: destino || null,
+          causa: causa || "",
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error("Error al guardar en bajas:", res.status, err);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error("Error de red al guardar en bajas:", err);
+      return false;
+    }
+  };
+
   const cargarDatosDeLaNube = async (configOverride = null) => {
     const config = configOverride || cloudConfig;
     if (!config.url || !config.key) return;
@@ -2943,7 +3178,8 @@ function App() {
         dose: c.dose || '',
         obs: c.obs || '',
         pesoMedio: c.peso_medio !== undefined && c.peso_medio !== null ? String(c.peso_medio) : '',
-        muestras: c.muestras || ''
+        muestras: c.muestras || '',
+        lote_id: c.lote_id || null
       }));
 
       // 2. Cargar puestas
@@ -3372,6 +3608,11 @@ function App() {
       try {
         await syncInventarioNube({ id: id, grupo: grupo, count: nuevoCount });
         await guardarTratamientoEnNube(nuevaBajaEvent, "baja");
+        await guardarBajaEnNube({
+          tanqueId: id, grupo, cantidad: cantidad,
+          categoria: "Mortalidad",
+          loteIdLocal: itemAfectado.lote_id,
+        });
       } catch (err) {
         console.error("Error al guardar baja en la nube:", err);
         setCloudSaveError(`Error al guardar baja: ${err.message}`);
@@ -4399,6 +4640,11 @@ function App() {
       try {
         await syncInventarioNube({ id: id, grupo: grupo, count: nuevoCount });
         await guardarTratamientoEnNube(nuevaSalidaEvent, "salida");
+        await guardarBajaEnNube({
+          tanqueId: id, grupo, cantidad: cantidad,
+          categoria: "Salida", tipoSalida, destino: destinoStr,
+          loteIdLocal: itemAfectado.lote_id,
+        });
       } catch (err) {
         console.error("Error al guardar salida en la nube:", err);
         setCloudSaveError(`Error al guardar salida: ${err.message}`);
