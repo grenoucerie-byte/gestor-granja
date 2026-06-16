@@ -4436,7 +4436,7 @@ function App() {
     const hoy = new Date().toISOString().split("T")[0];
     setModalLastDate(hoy);
 
-    alert("✅ " + (modalTratCategoria === "alimento" ? "Alimentación" : "Tratamiento") + " registrado correctamente.");
+    alert("✅ " + (modalTratCategoria === "alimento" ? "Alimentación" : modalTratCategoria === "mantenimiento" ? "Mantenimiento" : "Tratamiento") + " registrado correctamente.");
     // Limpiar campos del formulario
     setModalTratTipo("");
     setModalTratDosis("");
@@ -8294,7 +8294,7 @@ function App() {
             </div>
 
             {/* Acciones Rápidas (Bajas y Alimento/Tratamientos) */}
-            {selectedCell.cell.count > 0 && selectedCell.grupo !== "invernadero" && selectedCell.grupo !== "incubadoras" && (
+            {selectedCell.grupo !== "invernadero" && selectedCell.grupo !== "incubadoras" && (
               <div
                 style={{
                   background: "#fcfdfd",
@@ -8317,7 +8317,8 @@ function App() {
                   Acciones de Control Diario
                 </h4>
 
-                {/* Registro de Bajas */}
+                {/* Registro de Bajas — requiere animales presentes */}
+                {selectedCell.cell.count > 0 && (
                 <div
                   style={{
                     display: "flex",
@@ -8340,8 +8341,10 @@ function App() {
                     💀 Registrar Bajas
                   </button>
                 </div>
+                )}
 
-                {/* Registro de Salida a Industria / SANDACH */}
+                {/* Registro de Salida a Industria / SANDACH — requiere animales presentes */}
+                {selectedCell.cell.count > 0 && (
                 <div
                   style={{
                     display: "flex",
@@ -8398,8 +8401,9 @@ function App() {
                     Registrar Salida
                   </button>
                 </div>
+                )}
 
-                {/* Registro de Alimentación / Tratamientos — PARAMETRIZADO */}
+                {/* Registro de Alimentación / Tratamientos — PARAMETRIZADO (siempre disponible, incluso sin animales: limpieza/desinfección) */}
                 <div style={{ background: "#f8f9fa", borderRadius: "10px", padding: "0.8rem", border: "1px solid #e0e0e0" }}>
                   
                   {/* Selector de categoría */}
@@ -8408,6 +8412,7 @@ function App() {
                       { val: "alimento",    emoji: "🌿", label: "Alimento" },
                       { val: "medicamento", emoji: "💊", label: "Medicamento" },
                       { val: "preventivo",  emoji: "🛡️", label: "Preventivo" },
+                      { val: "mantenimiento", emoji: "🧹", label: "Mantenimiento" },
                     ].map(({ val, emoji, label }) => (
                       <button
                         key={val}
@@ -8433,8 +8438,11 @@ function App() {
                   {(() => {
                     const CHIPS_ALIMENTO = ["Calcio carbonato", "Asticot", "Vitaminas", "Micro-pellets"];
                     const CHIPS_TRAT = ["Ganadexil", "Levamisol", "Sal (desparasitación)", "Inducción hormonal", "Frío (baño)"];
+                    const CHIPS_MANTENIMIENTO = ["Desinfección general", "Limpieza de filtros", "Cambio de agua completo", "Secado y aireación", "Revisión de instalación"];
                     const chipsAlmacen = inventario.map(i => i.nombre).filter(Boolean);
-                    const chipsBase = modalTratCategoria === "alimento" ? CHIPS_ALIMENTO : CHIPS_TRAT;
+                    const chipsBase = modalTratCategoria === "alimento" ? CHIPS_ALIMENTO
+                      : modalTratCategoria === "mantenimiento" ? CHIPS_MANTENIMIENTO
+                      : CHIPS_TRAT;
                     const chips = [...new Set([...chipsAlmacen, ...chipsBase])];
                     return (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", marginBottom: "0.7rem" }}>
@@ -8464,18 +8472,24 @@ function App() {
                   <div style={{ display: "grid", gridTemplateColumns: modalTratCategoria === "alimento" ? "2fr 1fr 80px" : "2fr 1fr", gap: "0.5rem", marginBottom: "0.5rem" }}>
                     <div className="input-group" style={{ margin: 0 }}>
                       <label style={{ fontSize: "0.78rem" }}>
-                        {modalTratCategoria === "alimento" ? "🌿 Nombre del Alimento" : "💊 Nombre del Medicamento / Tratamiento"}
+                        {modalTratCategoria === "alimento" ? "🌿 Nombre del Alimento"
+                          : modalTratCategoria === "mantenimiento" ? "🧹 Acción de mantenimiento"
+                          : "💊 Nombre del Medicamento / Tratamiento"}
                       </label>
                       <input
                         type="text"
-                        placeholder={modalTratCategoria === "alimento" ? "Spirulina, Micro-pellets, Sal..." : "Nombre del producto..."}
+                        placeholder={modalTratCategoria === "alimento" ? "Spirulina, Micro-pellets, Sal..."
+                          : modalTratCategoria === "mantenimiento" ? "Desinfección, limpieza de filtros..."
+                          : "Nombre del producto..."}
                         value={modalTratTipo}
                         onChange={(e) => setModalTratTipo(e.target.value)}
                       />
                     </div>
                     <div className="input-group" style={{ margin: 0 }}>
                       <label style={{ fontSize: "0.78rem" }}>
-                        {modalTratCategoria === "alimento" ? "Gramos / toma" : "Dosis por aplicación"}
+                        {modalTratCategoria === "alimento" ? "Gramos / toma"
+                          : modalTratCategoria === "mantenimiento" ? "Producto usado (opcional)"
+                          : "Dosis por aplicación"}
                       </label>
                       <input
                         type="text"
@@ -8583,7 +8597,9 @@ function App() {
                       onClick={ejecutarTratamientoModal}
                       style={{ width: "auto", padding: "0.5rem 1.5rem" }}
                     >
-                      {modalTratCategoria === "alimento" ? "🌿 Registrar Alimento" : "💊 Registrar Tratamiento"}
+                      {modalTratCategoria === "alimento" ? "🌿 Registrar Alimento"
+                        : modalTratCategoria === "mantenimiento" ? "🧹 Registrar Mantenimiento"
+                        : "💊 Registrar Tratamiento"}
                     </button>
                   </div>
                 </div>
@@ -8616,7 +8632,8 @@ function App() {
                       {histTrat.map(t => {
                         const esAlim = (t.categoria || t.tipo || "").toLowerCase().includes("aliment") || (t.tipo || "").toLowerCase().includes("aliment");
                         const esMed = (t.categoria || t.tipo || "").toLowerCase().includes("medicament") || (t.categoria || t.tipo || "").toLowerCase().includes("antibi") || (t.categoria || t.tipo || "").toLowerCase().includes("tratamiento");
-                        const chipColor = esAlim ? { bg: "#e8f8f0", color: "#1a7a40" } : esMed ? { bg: "#fdecea", color: "#c0392b" } : { bg: "#eaf0ff", color: "#2c5282" };
+                        const esMant = (t.categoria || "").toLowerCase().includes("mantenimiento");
+                        const chipColor = esMant ? { bg: "#eef2f5", color: "#34495e" } : esAlim ? { bg: "#e8f8f0", color: "#1a7a40" } : esMed ? { bg: "#fdecea", color: "#c0392b" } : { bg: "#eaf0ff", color: "#2c5282" };
                         return (
                           <div key={t.id} style={{ background: "#fff", border: "1px solid #e9ecef", borderRadius: "6px", padding: "0.4rem 0.7rem", fontSize: "0.8rem", display: "flex", flexDirection: "column", gap: "2px" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
@@ -9368,6 +9385,7 @@ function TableHistory({ items, onBorrar, isPuesta, isDashboard = false }) {
     if (c.includes("preventiv") || c.includes("vitamina") || c.includes("suplemento")) return "🛡️";
     if (c.includes("desparasit")) return "🧴";
     if (c.includes("hormona") || c.includes("induccion") || c.includes("inducción")) return "💉";
+    if (c.includes("mantenimiento") || c.includes("limpieza") || c.includes("desinfec")) return "🧹";
     if (c.includes("aliment") || c === "alimento") return "🌿";
     return "💊";
   };
@@ -9377,6 +9395,7 @@ function TableHistory({ items, onBorrar, isPuesta, isDashboard = false }) {
     if (c.includes("desparasit")) return { bg: "#f0e6ff", color: "#6c3483" };
     if (c.includes("hormona") || c.includes("induccion") || c.includes("inducción")) return { bg: "#fef9e7", color: "#d4ac0d" };
     if (c.includes("preventiv") || c.includes("vitamina") || c.includes("suplemento")) return { bg: "#eaf3fb", color: "#1a5276" };
+    if (c.includes("mantenimiento") || c.includes("limpieza") || c.includes("desinfec")) return { bg: "#eef2f5", color: "#34495e" };
     return { bg: "#e8f8f0", color: "#1a7a40" }; // alimento
   };
 
