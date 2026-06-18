@@ -27,6 +27,7 @@ dist-ssr
 
 # Secretos / configuración local (contiene tokens reales - NUNCA subir)
 .claude/settings.local.json
+recovery-codes*.txt
 
 # Exports de datos reales de producción (no subir datos de animales)
 TABLAS SUPABASE*/
