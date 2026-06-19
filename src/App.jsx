@@ -1137,6 +1137,7 @@ function App() {
   const [modalTratNumTomas, setModalTratNumTomas] = useState("1");           // nº de tomas/día (alimento)
   const [modalTratNotas, setModalTratNotas] = useState("");                  // observaciones clínicas
   const [mostrarTratExpandido, setMostrarTratExpandido] = useState(false);   // expandir / colapsar opciones
+  const [modalTratNumIndividuos, setModalTratNumIndividuos] = useState("1");
   const [modalBajaCant, setModalBajaCant] = useState("1");
   const [modalBajaSexo, setModalBajaSexo] = useState("");
   const [modalSalidaCant, setModalSalidaCant] = useState("1");
@@ -1258,6 +1259,7 @@ function App() {
     motivo: "",
     copiarTratamiento: true,
     copiarAlimentacion: true,
+    sexo: "",
   });
   const [pesajeForm, setPesajeForm] = useState({
     gramosTotales: "",
@@ -1425,6 +1427,7 @@ function App() {
         motivo: "",
         copiarTratamiento: true,
         copiarAlimentacion: true,
+        sexo: "",
       });
     }
     setTransferenciaActiva(null);
@@ -1712,6 +1715,27 @@ function App() {
           count: nuevoCountDestino,
           ...extrasDestino
         });
+      }
+    }
+
+    // Descontar del subgrupo sexado en origen si se especificó sexo
+    const sexoTraslado = trasladoForm.sexo || "";
+    if (sexoTraslado) {
+      const origenEnNew = newData[origenGrupo]?.find(
+        (i) => normalizarId(i.id).toLowerCase() === normalizarId(idOrigenExacto).toLowerCase()
+      );
+      if (origenEnNew) {
+        const parsed = parseSubgrupos(origenEnNew.obs || "");
+        let restante = cant;
+        parsed.subgrupos = parsed.subgrupos.map(sg => {
+          if (sg.sexo === sexoTraslado && restante > 0) {
+            const quitar = Math.min(sg.cantidad, restante);
+            restante -= quitar;
+            return { ...sg, cantidad: sg.cantidad - quitar };
+          }
+          return sg;
+        });
+        origenEnNew.obs = serializeSubgrupos(parsed.subgrupos, parsed.comentario);
       }
     }
 
@@ -2930,6 +2954,7 @@ function App() {
       setModalTratNumDosis("");
       setModalTratNotas("");
       setMostrarTratExpandido(false);
+      setModalTratNumIndividuos("1");
       setModalBajaCant("1");
       setModalBajaSexo("");
       setModalPesoMedio(selectedCell.cell.pesoMedio || "");
@@ -4860,16 +4885,22 @@ function App() {
       return;
     }
 
-    await aplicarTratamiento(id, modalTratTipo, modalTratDosis, {
+    const numInd = modalTratCategoria === "medicamento" ? parseInt(modalTratNumIndividuos) || 1 : 1;
+    const dosisTexto = numInd > 1 ? `${numInd}×${modalTratDosis}` : modalTratDosis;
+    const notasConInd = numInd > 1
+      ? `${modalTratNotas ? modalTratNotas + " | " : ""}${numInd} individuos tratados`
+      : modalTratNotas;
+
+    await aplicarTratamiento(id, modalTratTipo, dosisTexto, {
       categoria: modalTratCategoria,
       frecuencia: modalTratFrecuencia,
       numDosis: modalTratNumDosis,
       numTomas: modalTratCategoria === "alimento" ? (modalTratNumTomas || "1") : undefined,
-      notas: modalTratNotas,
+      notas: notasConInd,
     });
 
     setModalType(modalTratTipo);
-    setModalDose((prev) => prev || modalTratDosis);
+    setModalDose((prev) => prev || dosisTexto);
     const hoy = new Date().toISOString().split("T")[0];
     setModalLastDate(hoy);
 
@@ -4881,6 +4912,7 @@ function App() {
     setModalTratFrecuencia("");
     setModalTratNumDosis("");
     setModalTratNotas("");
+    setModalTratNumIndividuos("1");
     setMostrarTratExpandido(false);
   };
 
@@ -7728,6 +7760,28 @@ function App() {
                 </div>
               </div>
 
+              {/* Selector de sexo si el origen tiene subgrupos sexados */}
+              {(() => {
+                const parsed = parseSubgrupos(itemOrigen?.obs || "");
+                const sexos = parsed.subgrupos.filter(sg => sg.sexo && sg.sexo !== "Desconocido" && sg.cantidad > 0);
+                if (sexos.length === 0) return null;
+                return (
+                  <div className="input-group" style={{ marginBottom: "1.2rem" }}>
+                    <label>Sexo de los individuos a trasladar</label>
+                    <select
+                      value={trasladoForm.sexo}
+                      onChange={(e) => setTrasladoForm(prev => ({ ...prev, sexo: e.target.value }))}
+                      style={{ padding: "0.5rem", borderRadius: "6px", border: "1px solid #ccc", width: "100%" }}
+                    >
+                      <option value="">Sin especificar (mixto)</option>
+                      {sexos.map(sg => (
+                        <option key={sg.sexo} value={sg.sexo}>{sg.sexo} ({sg.cantidad} ud)</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
+
               <div className="input-group" style={{ marginBottom: "1.5rem" }}>
                 <label>2. Motivo del traslado (Opcional)</label>
                 <input
@@ -8962,7 +9016,7 @@ function App() {
                   })()}
 
                   {/* Nombre y dosis — fila principal */}
-                  <div style={{ display: "grid", gridTemplateColumns: modalTratCategoria === "alimento" ? "2fr 1fr 80px" : "2fr 1fr", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: modalTratCategoria === "alimento" ? "2fr 1fr 80px" : modalTratCategoria === "medicamento" ? "2fr 1fr 80px" : "2fr 1fr", gap: "0.5rem", marginBottom: "0.5rem" }}>
                     <div className="input-group" style={{ margin: 0 }}>
                       <label style={{ fontSize: "0.78rem" }}>
                         {modalTratCategoria === "alimento" ? "🌿 Nombre del Alimento"
@@ -8973,7 +9027,7 @@ function App() {
                         type="text"
                         placeholder={modalTratCategoria === "alimento" ? "Spirulina, Micro-pellets, Sal..."
                           : modalTratCategoria === "mantenimiento" ? "Desinfección, limpieza de filtros..."
-                          : "Nombre del producto..."}
+                          : "Veterelin, Ganadexil, Levamisol..."}
                         value={modalTratTipo}
                         onChange={(e) => setModalTratTipo(e.target.value)}
                       />
@@ -8982,11 +9036,11 @@ function App() {
                       <label style={{ fontSize: "0.78rem" }}>
                         {modalTratCategoria === "alimento" ? "Gramos / toma"
                           : modalTratCategoria === "mantenimiento" ? "Producto usado (opcional)"
-                          : "Dosis por aplicación"}
+                          : "Dosis por individuo"}
                       </label>
                       <input
                         type="text"
-                        placeholder={modalTratCategoria === "alimento" ? "ej: 5g" : "5g, 2ml..."}
+                        placeholder={modalTratCategoria === "alimento" ? "ej: 5g" : "0.5ml, 2ml..."}
                         value={modalTratDosis}
                         onChange={(e) => setModalTratDosis(e.target.value)}
                       />
@@ -9003,7 +9057,26 @@ function App() {
                         </select>
                       </div>
                     )}
+                    {modalTratCategoria === "medicamento" && (
+                      <div className="input-group" style={{ margin: 0 }}>
+                        <label style={{ fontSize: "0.78rem" }}>Nº indiv.</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={modalTratNumIndividuos}
+                          onChange={e => setModalTratNumIndividuos(e.target.value || "1")}
+                          style={{ padding: "0.4rem", borderRadius: "6px", border: "1px solid #ccc", width: "100%", fontSize: "0.85rem", textAlign: "center" }}
+                        />
+                      </div>
+                    )}
                   </div>
+
+                  {/* Resumen de dosis total si hay varios individuos */}
+                  {modalTratCategoria === "medicamento" && parseInt(modalTratNumIndividuos) > 1 && modalTratDosis && (
+                    <div style={{ background: "#fff3e0", border: "1px solid #ffe0b2", borderRadius: "6px", padding: "0.4rem 0.7rem", fontSize: "0.78rem", color: "#e65100", marginBottom: "0.5rem" }}>
+                      💊 Total administrado: <strong>{modalTratNumIndividuos} individuos × {modalTratDosis}</strong> = {modalTratNumIndividuos} dosis
+                    </div>
+                  )}
 
                   {/* Resumen de ración diaria si hay tomas > 1 */}
                   {modalTratCategoria === "alimento" && parseInt(modalTratNumTomas) > 1 && modalTratDosis && (
