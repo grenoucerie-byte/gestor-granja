@@ -3052,9 +3052,25 @@ function App() {
       );
       if (!res.ok) { ubicacionIdCacheRef.current[codigo] = null; return null; }
       const rows = await res.json();
-      const id = rows[0]?.id || null;
-      ubicacionIdCacheRef.current[codigo] = id;
-      return id;
+      if (rows[0]?.id) {
+        ubicacionIdCacheRef.current[codigo] = rows[0].id;
+        return rows[0].id;
+      }
+      // Auto-crear ubicación si no existe (resuelve UCI-*, Corral-*, Caja-Blanca, etc.)
+      const resCrear = await fetch(`${cloudConfig.url}/rest/v1/ubicaciones`, {
+        method: "POST",
+        headers: { ...obtenerCabeceras(), Prefer: "return=representation" },
+        body: JSON.stringify({ codigo, nombre: codigo }),
+      });
+      if (!resCrear.ok) {
+        console.warn(`No se pudo auto-crear ubicación "${codigo}":`, await resCrear.text().catch(() => ""));
+        ubicacionIdCacheRef.current[codigo] = null;
+        return null;
+      }
+      const creados = await resCrear.json();
+      const nuevoId = creados[0]?.id || null;
+      ubicacionIdCacheRef.current[codigo] = nuevoId;
+      return nuevoId;
     } catch (err) {
       console.error("Error al resolver ubicación:", err);
       return null;
