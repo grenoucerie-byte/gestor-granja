@@ -2,6 +2,34 @@ import React, { useState, useEffect, useRef } from "react";
 import "./index.css";
 import ReportesExportar from "./components/ReportesExportar";
 
+// ── Catálogo de productos y planes por defecto ──────────────────────────────
+const PRODUCTOS_DEFAULT = [
+  "MICROBAQ T-0",
+  "AGUA VERDE",
+  "DAPHNIA",
+  "DIBAQ T 1MM",
+  "DIBAQ T 2MM",
+  "DIBAQ T 4.5MM",
+  "Alimento vivo pequeño",
+  "Alimento VIVO",
+  "CALCIO",
+  "PIENSO RAMIRO",
+];
+
+const _mk  = (p, tipo="fijo")  => ({ producto: p, cantidad: "", tomas: "1", tipo });
+const _mkF = (...ps)            => ps.map(p => _mk(p, "fijo"));
+const PLANES_FASE_DEFAULT = {
+  "Renacuajo S":      { items: [_mk("MICROBAQ T-0","fijo"), _mk("AGUA VERDE","ocasional"), _mk("DAPHNIA","ocasional")],                    frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
+  "Renacuajo M":      { items: [_mk("MICROBAQ T-0","fijo"), _mk("AGUA VERDE","ocasional"), _mk("DAPHNIA","ocasional")],                    frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
+  "2 patas":          { items: [_mk("MICROBAQ T-0","fijo"), _mk("AGUA VERDE","ocasional"), _mk("DAPHNIA","ocasional")],                    frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
+  "Recién metamorf.": { items: [_mk("DIBAQ T 2MM","fijo"), _mk("DIBAQ T 1MM","fijo"), _mk("Alimento vivo pequeño","ocasional"), _mk("CALCIO","ocasional")], frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
+  "Iniciación":       { items: [_mk("DIBAQ T 2MM","fijo"), _mk("DIBAQ T 1MM","fijo"), _mk("Alimento vivo pequeño","ocasional"), _mk("CALCIO","ocasional")], frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
+  "Juvenil":          { items: [_mk("DIBAQ T 2MM","fijo"), _mk("DIBAQ T 1MM","fijo"), _mk("Alimento vivo pequeño","ocasional"), _mk("CALCIO","ocasional")], frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
+  "Engorde":          { items: [_mk("DIBAQ T 4.5MM","fijo"), _mk("Alimento VIVO","ocasional"), _mk("CALCIO","ocasional"), _mk("PIENSO RAMIRO","ocasional")], frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
+  "Reproductora":     { items: [_mk("DIBAQ T 4.5MM","fijo"), _mk("Alimento VIVO","ocasional"), _mk("CALCIO","ocasional"), _mk("PIENSO RAMIRO","ocasional")], frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
+};
+// ───────────────────────────────────────────────────────────────────────────
+
 // Función para normalizar los identificadores de celdas (elimina comillas y limpia espacios)
 const normalizarId = (id) => {
   if (!id) return "";
@@ -1039,6 +1067,9 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Bajas cargadas desde la tabla normalizada `bajas` en Supabase
+  const [bajasCloud, setBajasCloud] = useState([]);
+
   const [inventario, setInventario] = useState(() => {
     const saved = localStorage.getItem("grenoucerie_inventario");
     return saved
@@ -1107,6 +1138,7 @@ function App() {
   const [modalTratNotas, setModalTratNotas] = useState("");                  // observaciones clínicas
   const [mostrarTratExpandido, setMostrarTratExpandido] = useState(false);   // expandir / colapsar opciones
   const [modalBajaCant, setModalBajaCant] = useState("1");
+  const [modalBajaSexo, setModalBajaSexo] = useState("");
   const [modalSalidaCant, setModalSalidaCant] = useState("1");
   const [modalRegaDestino, setModalRegaDestino] = useState("");
   const [modalTipoSalida, setModalTipoSalida] = useState("REGA");
@@ -1189,9 +1221,19 @@ function App() {
   const [planesFase, setPlanesFase] = useState(() => {
     try {
       const saved = localStorage.getItem("grenoucerie_planes_fase");
-      return saved ? JSON.parse(saved) : {};
-    } catch { return {}; }
+      const parsed = saved ? JSON.parse(saved) : null;
+      return (parsed && Object.keys(parsed).length > 0) ? parsed : { ...PLANES_FASE_DEFAULT };
+    } catch { return { ...PLANES_FASE_DEFAULT }; }
   });
+
+  const [productosDisponibles, setProductosDisponibles] = useState(() => {
+    try {
+      const saved = localStorage.getItem("grenoucerie_productos");
+      const parsed = saved ? JSON.parse(saved) : null;
+      return parsed?.length ? parsed : [...PRODUCTOS_DEFAULT];
+    } catch { return [...PRODUCTOS_DEFAULT]; }
+  });
+  const [nuevoProd, setNuevoProd] = useState("");
 
   // Estado para secciones expandibles de planes en el modal de celda
   const [planesExpanded, setPlanesExpanded] = useState(false);
@@ -1242,7 +1284,7 @@ function App() {
   const cargarPlanesDesdeNube = async () => {
     if (!isCloudConnected || !cloudConfig.url) return;
     try {
-      const res = await fetch(`${cloudConfig.url}/rest/v1/configuracion?id=in.(planes_alimentacion,planes_tratamiento,planes_fase)`, {
+      const res = await fetch(`${cloudConfig.url}/rest/v1/configuracion?id=in.(planes_alimentacion,planes_tratamiento,planes_fase,productos_disponibles)`, {
         headers: obtenerCabeceras(),
       });
       if (!res.ok) return;
@@ -1252,6 +1294,7 @@ function App() {
         if (row.id === "planes_alimentacion") setPlanesAlimentacion(prev => ({ ...row.datos, ...prev }));
         if (row.id === "planes_tratamiento") setPlanesTratamiento(prev => ({ ...row.datos, ...prev }));
         if (row.id === "planes_fase") setPlanesFase(prev => ({ ...row.datos, ...prev }));
+        if (row.id === "productos_disponibles" && Array.isArray(row.datos)) setProductosDisponibles(row.datos);
       });
     } catch (e) {
       console.warn("Error al cargar planes desde nube:", e);
@@ -1273,7 +1316,8 @@ function App() {
           dose: item.dose || null,
           obs: item.obs || null,
           peso_medio: item.peso_medio || item.pesoMedio || null,
-          muestras: item.muestras || null
+          muestras: item.muestras || null,
+          fecha_fase: item.fecha_fase || item.fechaFase || null
         }
       : item;
 
@@ -1290,13 +1334,14 @@ function App() {
       if (!res.ok) {
         const errorText = await res.text();
         console.error(`❌ Error al sincronizar en la nube (${res.status}):`, errorText);
-        if (errorText.includes("column") && (errorText.includes("muestras") || errorText.includes("peso_medio"))) {
+        if (errorText.includes("column") && (errorText.includes("muestras") || errorText.includes("peso_medio") || errorText.includes("fecha_fase"))) {
           alert(
-            "⚠️ ATENCIÓN: Faltan las columnas de guardado especial en tu base de datos de Supabase.\n\n" +
-            "Para solucionarlo, por favor ve al panel de Supabase -> SQL Editor, crea una nueva consulta (New Query), pega el siguiente texto y pulsa RUN:\n\n" +
+            "⚠️ ATENCIÓN: Faltan columnas en tu base de datos de Supabase.\n\n" +
+            "Ve al panel de Supabase -> SQL Editor, pega el siguiente texto y pulsa RUN:\n\n" +
             "ALTER TABLE public.censos ADD COLUMN IF NOT EXISTS muestras text;\n" +
-            "ALTER TABLE public.censos ADD COLUMN IF NOT EXISTS peso_medio text;\n\n" +
-            "Una vez hecho esto, los datos del Invernadero y la biomasa se guardarán correctamente."
+            "ALTER TABLE public.censos ADD COLUMN IF NOT EXISTS peso_medio text;\n" +
+            "ALTER TABLE public.censos ADD COLUMN IF NOT EXISTS fecha_fase date;\n\n" +
+            "Una vez hecho esto, los datos se guardarán correctamente."
           );
         } else {
           // Mostrar alert detallado temporalmente para diagnosticar qué falla en la base de datos
@@ -2407,6 +2452,27 @@ function App() {
           🌿 Panel de Alimentación
         </h2>
 
+        {/* ── CATÁLOGO DE PRODUCTOS ── */}
+        <div style={{ marginBottom: "1.5rem", background: "#f9f9f9", border: "1px solid #ddd", borderRadius: "12px", padding: "0.9rem 1.2rem" }}>
+          <div style={{ fontWeight: "bold", fontSize: "0.9rem", color: "#444", marginBottom: "0.6rem" }}>🗂 Catálogo de productos</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginBottom: "0.6rem" }}>
+            {productosDisponibles.map(p => (
+              <span key={p} style={{ display: "flex", alignItems: "center", gap: "4px", background: "#fff", border: "1px solid #ccc", borderRadius: "12px", padding: "0.2rem 0.6rem", fontSize: "0.78rem" }}>
+                {p}
+                <button onClick={() => setProductosDisponibles(prev => prev.filter(x => x !== p))}
+                  style={{ background: "none", border: "none", color: "#e74c3c", cursor: "pointer", fontSize: "0.85rem", lineHeight: 1, padding: 0 }}>×</button>
+              </span>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: "0.4rem" }}>
+            <input type="text" value={nuevoProd} onChange={e => setNuevoProd(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && nuevoProd.trim()) { setProductosDisponibles(prev => [...prev, nuevoProd.trim()]); setNuevoProd(""); }}}
+              placeholder="Nuevo producto..." style={{ flex: 1, padding: "0.3rem 0.6rem", borderRadius: "6px", border: "1px solid #ccc", fontSize: "0.8rem" }} />
+            <button onClick={() => { if (nuevoProd.trim()) { setProductosDisponibles(prev => [...prev, nuevoProd.trim()]); setNuevoProd(""); }}}
+              style={{ padding: "0.3rem 0.8rem", borderRadius: "6px", background: "#27ae60", color: "white", border: "none", cursor: "pointer", fontSize: "0.8rem" }}>+ Añadir</button>
+          </div>
+        </div>
+
         {/* ── PLANES POR FASE ── */}
         <div style={{ marginBottom: "1.5rem", background: "#f8fff8", border: "1px solid #c8e6c9", borderRadius: "12px", overflow: "hidden" }}>
           <button
@@ -2471,7 +2537,7 @@ function App() {
                       {!editando && (
                         <div style={{ padding: "0.5rem 0.9rem", fontSize: "0.78rem", color: "#444" }}>
                           <div>{(plan.items || []).filter(i => i.producto).map(i => `${i.producto}${i.cantidad ? ` ${i.cantidad}${plan.modo === "biomasa" ? "% bio" : "g/toma"}` : ""}`).join(" · ") || <span style={{ color: "#bbb" }}>Sin productos</span>}</div>
-                          <div style={{ color: "#888", marginTop: "2px" }}>{plan.frecuencia || "Diario"} · {plan.tomasAl_dia || 1} toma(s)/día</div>
+                          <div style={{ color: "#888", marginTop: "2px" }}>{plan.frecuencia || "Diario"} · {plan.tomasAl_dia || 1} toma(s)/día{(plan.diasMin || plan.diasMax) ? ` · ⏱ ${plan.diasMin || "?"}–${plan.diasMax || "?"}d` : ""}</div>
                         </div>
                       )}
 
@@ -2502,29 +2568,59 @@ function App() {
                             </select>
                           </div>
                           {/* Productos */}
-                          {(plan.items || []).map((item, idx) => (
-                            <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 75px 50px 22px", gap: "3px", marginBottom: "4px", alignItems: "center" }}>
-                              <input type="text" value={item.producto || ""} placeholder="Producto..."
+                          <datalist id="grenoucerie-productos">
+                            {productosDisponibles.map(p => <option key={p} value={p} />)}
+                          </datalist>
+                          {(plan.items || []).map((item, idx) => {
+                            const esOcasional = item.tipo === "ocasional";
+                            const toggleTipo = () => { const items = [...(plan.items||[])]; items[idx] = { ...items[idx], tipo: esOcasional ? "fijo" : "ocasional" }; savePlanFase(fase, { ...plan, items }); };
+                            return (
+                            <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 70px 46px 68px 22px", gap: "3px", marginBottom: "4px", alignItems: "center" }}>
+                              <input type="text" list="grenoucerie-productos" value={item.producto || ""} placeholder="Producto..."
                                 onChange={e => { const items = [...(plan.items||[])]; items[idx] = { ...items[idx], producto: e.target.value }; savePlanFase(fase, { ...plan, items }); }}
-                                style={{ padding: "0.3rem 0.4rem", fontSize: "0.78rem", borderRadius: "4px", border: "1px solid #ccc" }} />
-                              <input type="text" value={item.cantidad || ""} placeholder={plan.modo === "biomasa" ? "%" : "g/toma"}
-                                onChange={e => { const items = [...(plan.items||[])]; items[idx] = { ...items[idx], cantidad: e.target.value }; savePlanFase(fase, { ...plan, items }); }}
-                                style={{ padding: "0.3rem 0.4rem", fontSize: "0.78rem", borderRadius: "4px", border: "1px solid #ccc", textAlign: "right" }} />
-                              <select value={item.tomas || "1"} onChange={e => { const items = [...(plan.items||[])]; items[idx] = { ...items[idx], tomas: e.target.value }; savePlanFase(fase, { ...plan, items }); }}
-                                style={{ padding: "0.3rem 0.2rem", fontSize: "0.75rem", borderRadius: "4px", border: "1px solid #ccc" }}>
-                                {[1,2,3,4,5,6,8].map(n => <option key={n} value={n}>{n}×</option>)}
-                              </select>
+                                style={{ gridColumn: "1", padding: "0.3rem 0.4rem", fontSize: "0.78rem", borderRadius: "4px", border: "1px solid #ccc" }} />
+                              {esOcasional ? (
+                                <span style={{ gridColumn: "2 / 4", fontSize: "0.7rem", color: "#999", fontStyle: "italic", paddingLeft: "4px" }}>cuando nec.</span>
+                              ) : (
+                                <>
+                                  <input type="text" value={item.cantidad || ""} placeholder={plan.modo === "biomasa" ? "%" : "g/toma"}
+                                    onChange={e => { const items = [...(plan.items||[])]; items[idx] = { ...items[idx], cantidad: e.target.value }; savePlanFase(fase, { ...plan, items }); }}
+                                    style={{ gridColumn: "2", padding: "0.3rem 0.4rem", fontSize: "0.78rem", borderRadius: "4px", border: "1px solid #ccc", textAlign: "right" }} />
+                                  <select value={item.tomas || "1"} onChange={e => { const items = [...(plan.items||[])]; items[idx] = { ...items[idx], tomas: e.target.value }; savePlanFase(fase, { ...plan, items }); }}
+                                    style={{ gridColumn: "3", padding: "0.3rem 0.2rem", fontSize: "0.75rem", borderRadius: "4px", border: "1px solid #ccc" }}>
+                                    {[1,2,3,4,5,6,8].map(n => <option key={n} value={n}>{n}×</option>)}
+                                  </select>
+                                </>
+                              )}
+                              <button onClick={toggleTipo} style={{ gridColumn: "4", fontSize: "0.62rem", padding: "0.15rem 0.3rem", borderRadius: "4px", cursor: "pointer", border: "1px solid", background: esOcasional ? "#e8f4fd" : "#f0faf0", borderColor: esOcasional ? "#90caf9" : "#a5d6a7", color: esOcasional ? "#1565c0" : "#2e7d32" }}>
+                                {esOcasional ? "💧 Ocas." : "📅 Fijo"}
+                              </button>
                               <button onClick={() => { const items = (plan.items||[]).filter((_,i) => i !== idx); savePlanFase(fase, { ...plan, items }); }}
-                                style={{ background: "none", border: "none", color: "#e74c3c", cursor: "pointer", fontSize: "0.9rem" }}>×</button>
+                                style={{ gridColumn: "5", background: "none", border: "none", color: "#e74c3c", cursor: "pointer", fontSize: "0.9rem" }}>×</button>
                             </div>
-                          ))}
-                          <button onClick={() => savePlanFase(fase, { ...plan, items: [...(plan.items||[]), { producto: "", cantidad: "", tomas: "1" }] })}
+                            );
+                          })}
+                          <button onClick={() => savePlanFase(fase, { ...plan, items: [...(plan.items||[]), { producto: "", cantidad: "", tomas: "1", tipo: "fijo" }] })}
                             style={{ fontSize: "0.75rem", background: "#e8f8f0", border: "1px dashed #2ecc71", borderRadius: "4px", padding: "0.2rem 0.5rem", cursor: "pointer", color: "#27ae60", marginTop: "3px", width: "100%" }}>
                             + Añadir producto
                           </button>
                           <textarea value={plan.notas || ""} onChange={e => savePlanFase(fase, { ...plan, notas: e.target.value })}
                             placeholder="Notas..." rows={2}
                             style={{ width: "100%", marginTop: "0.4rem", fontSize: "0.75rem", borderRadius: "4px", border: "1px solid #ccc", padding: "0.3rem", resize: "vertical", boxSizing: "border-box" }} />
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem", marginTop: "0.5rem" }}>
+                            <div>
+                              <div style={{ fontSize: "0.7rem", color: "#666", marginBottom: "2px" }}>🟡 Días mín. en fase</div>
+                              <input type="number" min="1" value={plan.diasMin || ""} placeholder="—"
+                                onChange={e => savePlanFase(fase, { ...plan, diasMin: e.target.value ? parseInt(e.target.value) : null })}
+                                style={{ width: "100%", padding: "0.3rem", fontSize: "0.78rem", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box" }} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: "0.7rem", color: "#666", marginBottom: "2px" }}>🔴 Días máx. en fase</div>
+                              <input type="number" min="1" value={plan.diasMax || ""} placeholder="—"
+                                onChange={e => savePlanFase(fase, { ...plan, diasMax: e.target.value ? parseInt(e.target.value) : null })}
+                                style={{ width: "100%", padding: "0.3rem", fontSize: "0.78rem", borderRadius: "4px", border: "1px solid #ccc", boxSizing: "border-box" }} />
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2672,7 +2768,7 @@ function App() {
                 const totalDia = gToma * tomas;
                 return (
                   <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 65px 70px 55px 24px", gap: "0.3rem", marginBottom: "0.35rem", alignItems: "center" }}>
-                    <input type="text" placeholder="Producto..."
+                    <input type="text" list="grenoucerie-productos" placeholder="Producto..."
                       value={item.producto}
                       onChange={e => setBulkAlimItems(prev => prev.map((it, i) => i === idx ? { ...it, producto: e.target.value } : it))}
                       style={{ padding: "0.4rem 0.5rem", borderRadius: "6px", border: "1px solid #ccc", fontSize: "0.83rem" }} />
@@ -2835,6 +2931,7 @@ function App() {
       setModalTratNotas("");
       setMostrarTratExpandido(false);
       setModalBajaCant("1");
+      setModalBajaSexo("");
       setModalPesoMedio(selectedCell.cell.pesoMedio || "");
 
       if (selectedCell.grupo === "invernadero") {
@@ -3120,7 +3217,7 @@ function App() {
 
   // Registra una baja (mortalidad o salida a industria) en la tabla normalizada
   // `bajas`, resolviendo/creando el lote si hace falta.
-  const guardarBajaEnNube = async ({ tanqueId, grupo, cantidad, categoria, causa, tipoSalida, destino, loteIdLocal = null }) => {
+  const guardarBajaEnNube = async ({ tanqueId, grupo, cantidad, categoria, causa, tipoSalida, destino, loteIdLocal = null, sexo = null }) => {
     try {
       const loteId = await obtenerOCrearLote(tanqueId, grupo, loteIdLocal);
       if (!loteId) {
@@ -3138,11 +3235,15 @@ function App() {
           tipo_salida: tipoSalida || null,
           destino: destino || null,
           causa: causa || "",
+          sexo: sexo || null,
         }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        console.error("Error al guardar en bajas:", res.status, err);
+        const errText = await res.text().catch(() => "");
+        if (errText.includes("sexo")) {
+          alert("Falta columna en Supabase. Ve a SQL Editor y ejecuta:\n\nALTER TABLE public.bajas ADD COLUMN IF NOT EXISTS sexo text;");
+        }
+        console.error("Error al guardar en bajas:", res.status, errText);
         return false;
       }
       return true;
@@ -3179,6 +3280,7 @@ function App() {
         obs: c.obs || '',
         pesoMedio: c.peso_medio !== undefined && c.peso_medio !== null ? String(c.peso_medio) : '',
         muestras: c.muestras || '',
+        fechaFase: c.fecha_fase || '',
         lote_id: c.lote_id || null
       }));
 
@@ -3218,6 +3320,18 @@ function App() {
         if (resIncidencias.ok) incidenciasNube = await resIncidencias.json();
       } catch (err) {
         console.log("Error al cargar incidencias. Probablemente la tabla no exista aún.", err);
+      }
+
+      // 3c. Cargar bajas normalizadas (fuente autoritativa para alertas y export)
+      let bajasNube = [];
+      try {
+        const resBajas = await fetch(
+          `${config.url}/rest/v1/bajas?select=fecha,cantidad,causa,sexo,lote_id&order=fecha.desc`,
+          { headers: { apikey: config.key, Authorization: `Bearer ${config.key}` } },
+        );
+        if (resBajas.ok) bajasNube = await resBajas.json();
+      } catch (err) {
+        console.log("Error al cargar bajas. Probablemente la tabla no exista aún.", err);
       }
 
       // 4. Cargar inventario (Con try/catch separado por si la tabla aún no existe)
@@ -3381,6 +3495,7 @@ function App() {
         const soloLocales = prev.filter(i => !nubeIds.has(String(i.id)));
         return [...incidenciasNube, ...soloLocales];
       });
+      if (bajasNube.length > 0) setBajasCloud(bajasNube);
       setIsCloudConnected(true);
       cargarPlanesDesdeNube();
     } catch (err) {
@@ -3557,8 +3672,13 @@ function App() {
     syncPlanesNube("planes_fase", planesFase);
   }, [planesFase]);
 
+  useEffect(() => {
+    localStorage.setItem("grenoucerie_productos", JSON.stringify(productosDisponibles));
+    syncPlanesNube("productos_disponibles", productosDisponibles);
+  }, [productosDisponibles]);
+
   // Registro de bajas especiales con historial detallado
-  const registrarBajasEspecial = async (grupo, rawId, cantidadStr) => {
+  const registrarBajasEspecial = async (grupo, rawId, cantidadStr, { sexo = null } = {}) => {
     const id = normalizarId(rawId);
     const cantidad = parseInt(cantidadStr, 10);
     if (isNaN(cantidad) || cantidad <= 0) return;
@@ -3603,6 +3723,10 @@ function App() {
     };
     setTratamientos((prev) => [nuevaBajaEvent, ...prev]);
 
+    // Mantener bajasCloud sincronizado localmente
+    const hoyISO = new Date().toISOString().split("T")[0];
+    setBajasCloud((prev) => [{ fecha: hoyISO, cantidad, causa: null, sexo: sexo || null, lote_id: itemAfectado.lote_id || null }, ...prev]);
+
     // Guardar en la nube si está conectado
     if (isCloudConnected) {
       try {
@@ -3612,6 +3736,7 @@ function App() {
           tanqueId: id, grupo, cantidad: cantidad,
           categoria: "Mortalidad",
           loteIdLocal: itemAfectado.lote_id,
+          sexo,
         });
       } catch (err) {
         console.error("Error al guardar baja en la nube:", err);
@@ -3899,9 +4024,10 @@ function App() {
     if (!itemAfectado) return;
 
     let extraUpdates = {};
-    if (field === "type" && value !== "" && !itemAfectado.lastDate) {
+    if (field === "type") {
       const hoy = new Date().toISOString().split("T")[0];
-      extraUpdates.lastDate = hoy;
+      if (value !== "" && !itemAfectado.lastDate) extraUpdates.lastDate = hoy;
+      extraUpdates.fechaFase = value !== "" ? hoy : "";
     }
 
     const newData = { ...data };
@@ -3918,6 +4044,9 @@ function App() {
       const bodyUpdate = { [dbField]: value };
       if (extraUpdates.lastDate) {
         bodyUpdate.last_date = extraUpdates.lastDate;
+      }
+      if (extraUpdates.fechaFase !== undefined) {
+        bodyUpdate.fecha_fase = extraUpdates.fechaFase || null;
       }
       try {
         await syncInventarioNube({ id: id, grupo: grupo, ...bodyUpdate });
@@ -4041,12 +4170,19 @@ function App() {
 
     // 6. SECCIÓN: HISTORIAL DE BAJAS
     csvContenido += "SECCIÓN: HISTORIAL DE BAJAS (MORTALIDAD)\n";
-    csvContenido += "Fecha;Hora;Tanque;Cantidad de Bajas\n";
-    tratamientos
-      .filter((t) => t.tipo === "Baja")
-      .forEach((t) => {
-        csvContenido += `${t.fecha || ""};${t.hora || ""};${t.tanque || ""};${t.dosis || ""}\n`;
+    if (bajasCloud.length > 0) {
+      csvContenido += "Fecha;Cantidad;Sexo;Causa\n";
+      bajasCloud.forEach((b) => {
+        csvContenido += `${b.fecha || ""};${b.cantidad || ""};${b.sexo || ""};${b.causa || ""}\n`;
       });
+    } else {
+      csvContenido += "Fecha;Hora;Tanque;Cantidad de Bajas\n";
+      tratamientos
+        .filter((t) => t.tipo === "Baja")
+        .forEach((t) => {
+          csvContenido += `${t.fecha || ""};${t.hora || ""};${t.tanque || ""};${t.dosis || ""}\n`;
+        });
+    }
 
     const blob = new Blob([csvContenido], { type: "text/csv;charset=utf-8;" });
     const enlaceDescarga = document.createElement("a");
@@ -4187,8 +4323,13 @@ function App() {
   const censoMetamorfoseadas = calcularCensoGrupo(data.metamorfoseadas);
   const censoTotal = censoAdultos + censoRenacuajos + censoMetamorfoseadas;
 
-  // Cálculo de bajas diarias (Hoy y Ayer) con formato robusto
+  // Cálculo de bajas diarias — usa tabla normalizada `bajas` cuando hay datos, sino fallback a `tratamientos`
   const obtenerBajasPorFecha = (fechaNorm) => {
+    if (bajasCloud.length > 0) {
+      return bajasCloud
+        .filter((b) => b.fecha === fechaNorm)
+        .reduce((sum, b) => sum + (parseInt(b.cantidad, 10) || 0), 0);
+    }
     return tratamientos
       .filter(
         (t) => t.tipo === "Baja" && normalizarFecha(t.fecha) === fechaNorm,
@@ -4571,12 +4712,27 @@ function App() {
       return;
     }
 
-    await registrarBajasEspecial(grupo, id, cant);
+    await registrarBajasEspecial(grupo, id, cant, { sexo: modalBajaSexo || null });
 
-    // Actualizar censo local en el modal
+    // Descontar del subgrupo correspondiente si hay sexo seleccionado
+    if (modalBajaSexo && modalSubgrupos.length > 0) {
+      let restante = cant;
+      const actualizados = modalSubgrupos.map(sg => {
+        if (sg.sexo === modalBajaSexo && restante > 0) {
+          const deducir = Math.min(restante, sg.cantidad || 0);
+          restante -= deducir;
+          return { ...sg, cantidad: sg.cantidad - deducir };
+        }
+        return sg;
+      }).filter(sg => sg.cantidad > 0);
+      setModalSubgrupos(actualizados);
+    }
+
+    // Actualizar censo total en el modal
     const nuevoCenso = Math.max(0, modalCount - cant);
     setModalCount(nuevoCenso);
     setModalBajaCant("1");
+    setModalBajaSexo("");
     setIsProcessing(false);
   };
 
@@ -4827,6 +4983,13 @@ function App() {
                     {cell.count > 0 ? `${cell.count} ud` : "-"}
                   </div>
                   {cell.type && <div className="cell-fase">{cell.type}</div>}
+                  {cell.type && cell.fechaFase && planesFase[cell.type] && (() => {
+                    const plan = planesFase[cell.type];
+                    const dias = Math.floor((new Date() - new Date(cell.fechaFase)) / 86400000);
+                    if (plan.diasMax && dias > plan.diasMax) return <div style={{ fontSize: "0.65rem", color: "#e74c3c", fontWeight: "bold" }}>🔴 {dias}d</div>;
+                    if (plan.diasMin && dias >= plan.diasMin) return <div style={{ fontSize: "0.65rem", color: "#e67e22", fontWeight: "bold" }}>🟡 {dias}d</div>;
+                    return null;
+                  })()}
                   {(cell.pesoMedio || cell.peso_medio) && cell.count > 0 && (
                     <div className="cell-meta-preview"><span>~{cell.pesoMedio || cell.peso_medio}g</span></div>
                   )}
@@ -4874,6 +5037,13 @@ function App() {
                     {cell.count > 0 ? `${cell.count} ud` : "-"}
                   </div>
                   {cell.type && <div className="cell-fase">{cell.type}</div>}
+                  {cell.type && cell.fechaFase && planesFase[cell.type] && (() => {
+                    const plan = planesFase[cell.type];
+                    const dias = Math.floor((new Date() - new Date(cell.fechaFase)) / 86400000);
+                    if (plan.diasMax && dias > plan.diasMax) return <div style={{ fontSize: "0.65rem", color: "#e74c3c", fontWeight: "bold" }}>🔴 {dias}d</div>;
+                    if (plan.diasMin && dias >= plan.diasMin) return <div style={{ fontSize: "0.65rem", color: "#e67e22", fontWeight: "bold" }}>🟡 {dias}d</div>;
+                    return null;
+                  })()}
                   {(cell.pesoMedio || cell.peso_medio) && cell.count > 0 && (
                     <div className="cell-meta-preview"><span>~{cell.pesoMedio || cell.peso_medio}g</span></div>
                   )}
@@ -4962,6 +5132,13 @@ function App() {
                       {cell.count > 0 ? `${cell.count} ud` : "-"}
                     </div>
                     {cell.type && <div className="cell-fase">{cell.type}</div>}
+                    {cell.type && cell.fechaFase && planesFase[cell.type] && (() => {
+                      const plan = planesFase[cell.type];
+                      const dias = Math.floor((new Date() - new Date(cell.fechaFase)) / 86400000);
+                      if (plan.diasMax && dias > plan.diasMax) return <div style={{ fontSize: "0.65rem", color: "#e74c3c", fontWeight: "bold" }}>🔴 {dias}d</div>;
+                      if (plan.diasMin && dias >= plan.diasMin) return <div style={{ fontSize: "0.65rem", color: "#e67e22", fontWeight: "bold" }}>🟡 {dias}d</div>;
+                      return null;
+                    })()}
                     {(cell.pesoMedio || cell.peso_medio) && cell.count > 0 && (
                       <div className="cell-meta-preview"><span>~{cell.pesoMedio || cell.peso_medio}g</span></div>
                     )}
@@ -5004,6 +5181,13 @@ function App() {
                     {cell.count > 0 ? `${cell.count} ud` : "-"}
                   </div>
                   {cell.type && <div className="cell-fase">{cell.type}</div>}
+                  {cell.type && cell.fechaFase && planesFase[cell.type] && (() => {
+                    const plan = planesFase[cell.type];
+                    const dias = Math.floor((new Date() - new Date(cell.fechaFase)) / 86400000);
+                    if (plan.diasMax && dias > plan.diasMax) return <div style={{ fontSize: "0.65rem", color: "#e74c3c", fontWeight: "bold" }}>🔴 {dias}d</div>;
+                    if (plan.diasMin && dias >= plan.diasMin) return <div style={{ fontSize: "0.65rem", color: "#e67e22", fontWeight: "bold" }}>🟡 {dias}d</div>;
+                    return null;
+                  })()}
                   {(cell.pesoMedio || cell.peso_medio) && cell.count > 0 && (
                     <div className="cell-meta-preview"><span>~{cell.pesoMedio || cell.peso_medio}g</span></div>
                   )}
@@ -5049,6 +5233,13 @@ function App() {
                       {cell.count > 0 ? `${cell.count} ud` : "-"}
                     </div>
                     {cell.type && <div className="cell-fase">{cell.type}</div>}
+                    {cell.type && cell.fechaFase && planesFase[cell.type] && (() => {
+                      const plan = planesFase[cell.type];
+                      const dias = Math.floor((new Date() - new Date(cell.fechaFase)) / 86400000);
+                      if (plan.diasMax && dias > plan.diasMax) return <div style={{ fontSize: "0.65rem", color: "#e74c3c", fontWeight: "bold" }}>🔴 {dias}d</div>;
+                      if (plan.diasMin && dias >= plan.diasMin) return <div style={{ fontSize: "0.65rem", color: "#e67e22", fontWeight: "bold" }}>🟡 {dias}d</div>;
+                      return null;
+                    })()}
                     {(cell.pesoMedio || cell.peso_medio) && cell.count > 0 && (
                       <div className="cell-meta-preview"><span>~{cell.pesoMedio || cell.peso_medio}g</span></div>
                     )}
@@ -5693,6 +5884,13 @@ function App() {
                       >
                         {capacityText}
                       </span>
+                      {cell.type && cell.fechaFase && planesFase[cell.type] && (() => {
+                        const plan = planesFase[cell.type];
+                        const dias = Math.floor((new Date() - new Date(cell.fechaFase)) / 86400000);
+                        if (plan.diasMax && dias > plan.diasMax) return <span style={{ fontSize: "0.6rem", color: "#e74c3c", fontWeight: "bold", marginTop: "2px", display: "block" }}>🔴 {dias}d</span>;
+                        if (plan.diasMin && dias >= plan.diasMin) return <span style={{ fontSize: "0.6rem", color: "#e67e22", fontWeight: "bold", marginTop: "2px", display: "block" }}>🟡 {dias}d</span>;
+                        return null;
+                      })()}
                     </>
                   ) : (
                     <>
@@ -8604,6 +8802,18 @@ function App() {
                       max={modalCount}
                     />
                   </div>
+                  {modalSubgrupos.some(sg => sg.sexo && sg.sexo !== "Desconocido" && sg.cantidad > 0) && (
+                    <div className="input-group" style={{ flex: 1 }}>
+                      <label>Sexo de las bajas</label>
+                      <select value={modalBajaSexo} onChange={e => setModalBajaSexo(e.target.value)} style={{ padding: "0.4rem" }}>
+                        <option value="">Sin especificar</option>
+                        {[...new Set(modalSubgrupos.filter(sg => sg.sexo && sg.cantidad > 0).map(sg => sg.sexo))].map(s => {
+                          const total = modalSubgrupos.filter(sg => sg.sexo === s).reduce((a, sg) => a + (sg.cantidad || 0), 0);
+                          return <option key={s} value={s}>{s} ({total} ud)</option>;
+                        })}
+                      </select>
+                    </div>
+                  )}
                   <button className="btn-baja" onClick={ejecutarBajaModal}>
                     💀 Registrar Bajas
                   </button>
@@ -9088,7 +9298,7 @@ function App() {
                                 : null;
                               return (
                                 <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 90px 24px", gap: "4px", alignItems: "center" }}>
-                                  <input type="text" value={item.producto || ""} placeholder="Producto..."
+                                  <input type="text" list="grenoucerie-productos" value={item.producto || ""} placeholder="Producto..."
                                     onChange={e => { const items = [...(planAlim.items||[])]; items[idx]={...items[idx],producto:e.target.value}; saveAlim({...planAlim,items}); }}
                                     style={{ padding: "0.3rem 0.5rem", fontSize: "0.8rem", borderRadius: "4px", border: "1px solid #ccc" }}
                                   />
