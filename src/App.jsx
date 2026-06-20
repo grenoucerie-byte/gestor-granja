@@ -3098,7 +3098,9 @@ function App() {
         headers: obtenerCabeceras(),
         body: JSON.stringify({
           lote_id: loteId,
+          tanque_id: tanqueId,
           fecha: new Date().toISOString().split("T")[0],
+          hora: new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
           cantidad,
           categoria: categoria || "Mortalidad",
           tipo_salida: tipoSalida || null,
@@ -3195,7 +3197,7 @@ function App() {
       let bajasNube = [];
       try {
         const resBajas = await fetch(
-          `${config.url}/rest/v1/bajas?select=fecha,cantidad,causa,sexo,lote_id&order=fecha.desc`,
+          `${config.url}/rest/v1/bajas?select=fecha,hora,tanque_id,cantidad,causa,sexo,lote_id&order=fecha.desc`,
           { headers: { apikey: config.key, Authorization: `Bearer ${config.key}` } },
         );
         if (resBajas.ok) bajasNube = await resBajas.json();
@@ -3621,7 +3623,8 @@ function App() {
 
     // Mantener bajasCloud sincronizado localmente
     const hoyISO = new Date().toISOString().split("T")[0];
-    setBajasCloud((prev) => [{ fecha: hoyISO, cantidad, causa: null, sexo: sexo || null, lote_id: itemAfectado.lote_id || null }, ...prev]);
+    const horaISO = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+    setBajasCloud((prev) => [{ fecha: hoyISO, hora: horaISO, tanque_id: id, cantidad, causa: null, sexo: sexo || null, lote_id: itemAfectado.lote_id || null }, ...prev]);
 
     // Guardar en la nube si está conectado
     if (isCloudConnected) {
@@ -7091,9 +7094,9 @@ function App() {
                   ? bajasCloud.map((b, i) => ({
                       id: `baja-cloud-${i}`,
                       fecha: normalizarFecha(b.fecha),
-                      hora: "",
-                      tanque: b.sexo ? `${b.sexo}` : "—",
-                      tipo: `Baja${b.causa ? " — " + b.causa : ""}`,
+                      hora: b.hora || "",
+                      tanque: b.tanque_id || (b.sexo ? `${b.sexo}` : "—"),
+                      tipo: `Baja${b.sexo ? " (" + b.sexo + ")" : ""}${b.causa ? " — " + b.causa : ""}`,
                       dosis: String(b.cantidad || 0),
                     }))
                   : tratamientos.filter((t) => (t.tipo || "").toLowerCase().includes("baja"));
