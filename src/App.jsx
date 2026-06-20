@@ -5884,64 +5884,81 @@ function App() {
     );
   };
 
-  // Logica de Alarma de Desparasitacion
   const obtenerAlarmasTratamientos = () => {
     const alarmas = [];
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
+    const MAX_DIAS_ALARMA = 14;
+
+    const esExcluido = (t) => {
+      const tipo = (t.tipo || "").toLowerCase();
+      return tipo.includes("salida") || tipo.includes("baja") || tipo.includes("traslado") ||
+             tipo.includes("ajuste") || tipo.includes("ingreso") || tipo.includes("actualizaci");
+    };
 
     const requiere2aDosis = (t) => {
-      const tipo = (t.tipo || "").toLowerCase();
+      if (esExcluido(t)) return false;
       const cat = (t.categoria || "").toLowerCase();
-      if (parseInt(t.numDosis, 10) > 1) return true;
       if (cat.includes("desparasit")) return true;
+      if (parseInt(t.numDosis, 10) > 1) return true;
+      const tipo = (t.tipo || "").toLowerCase();
       return PRODUCTOS_2A_DOSIS.some(p => tipo.includes(p));
+    };
+
+    const extraerProductoBase = (tipo) => {
+      const t = (tipo || "").toUpperCase();
+      if (t.includes("LEVAMISOL")) return "LEVAMISOL";
+      if (t.includes("GANADEXIL")) return "GANADEXIL";
+      if (t.includes("VETERELIN")) return "VETERELIN";
+      if (t.includes("SAL")) return "SAL";
+      return t.trim();
     };
 
     const candidatos = tratamientos.filter(t => t.tipo && requiere2aDosis(t));
 
     const porTanqueProducto = {};
     candidatos.forEach(t => {
-      const producto = (t.tipo || "").toLowerCase().trim();
+      const producto = extraerProductoBase(t.tipo);
       const key = `${t.tanque}||${producto}`;
       if (!porTanqueProducto[key]) porTanqueProducto[key] = [];
       porTanqueProducto[key].push(t);
     });
 
+    const tanquesConAlarma = new Set();
+
     Object.entries(porTanqueProducto).forEach(([key, trats]) => {
-      const sorted = trats.sort((a, b) => {
-        const fA = parseFechaTrat(a.fecha);
-        const fB = parseFechaTrat(b.fecha);
-        return (fB || 0) - (fA || 0);
-      });
+      const tanqueId = key.split("||")[0];
+      if (tanquesConAlarma.has(tanqueId)) return;
+
+      const sorted = trats
+        .map(t => ({ ...t, _fecha: parseFechaTrat(t.fecha) }))
+        .filter(t => t._fecha)
+        .sort((a, b) => b._fecha - a._fecha);
+
+      if (sorted.length === 0) return;
 
       if (sorted.length >= 2) {
-        const f1 = parseFechaTrat(sorted[1].fecha);
-        const f2 = parseFechaTrat(sorted[0].fecha);
-        if (f1 && f2) {
-          const diasEntre = Math.floor((f2 - f1) / (1000 * 60 * 60 * 24));
-          if (diasEntre >= 5 && diasEntre <= 10) return;
-        }
+        const diasEntre = Math.floor((sorted[0]._fecha - sorted[1]._fecha) / (1000 * 60 * 60 * 24));
+        if (diasEntre >= 3 && diasEntre <= 12) return;
       }
 
-      const primera = sorted[sorted.length === 1 ? 0 : sorted.length - 1];
-      const fechaPrimera = parseFechaTrat(primera.fecha);
-      if (!fechaPrimera) return;
+      const primera = sorted[sorted.length - 1];
+      const diasPasados = Math.floor((hoy - primera._fecha) / (1000 * 60 * 60 * 24));
 
-      const diasPasados = Math.floor((hoy - fechaPrimera) / (1000 * 60 * 60 * 24));
+      if (diasPasados > MAX_DIAS_ALARMA) return;
+      if (diasPasados < 5) return;
+      if (sorted.length >= 2) return;
+
       const diasParaVencer = INTERVALO_2A_DOSIS - diasPasados;
-      const tanqueId = key.split("||")[0];
-
-      if (diasPasados >= 5 && sorted.length < 2) {
-        alarmas.push({
-          tanqueId,
-          producto: primera.tipo,
-          fechaPrimera: primera.fecha,
-          diasPasados,
-          diasParaVencer,
-          vencida: diasParaVencer < 0,
-        });
-      }
+      tanquesConAlarma.add(tanqueId);
+      alarmas.push({
+        tanqueId,
+        producto: extraerProductoBase(primera.tipo),
+        fechaPrimera: primera.fecha,
+        diasPasados,
+        diasParaVencer,
+        vencida: diasParaVencer < 0,
+      });
     });
 
     return alarmas;
