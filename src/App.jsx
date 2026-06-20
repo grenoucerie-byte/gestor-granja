@@ -1070,6 +1070,14 @@ function App() {
   // Bajas cargadas desde la tabla normalizada `bajas` en Supabase
   const [bajasCloud, setBajasCloud] = useState([]);
 
+  // Pizarra de comunicación entre responsables
+  const [notasPizarra, setNotasPizarra] = useState(() => {
+    const saved = localStorage.getItem("grenoucerie_notas_pizarra");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showFormNota, setShowFormNota] = useState(false);
+  const [formNota, setFormNota] = useState({ texto: "", area: "General", prioridad: "normal", autor: "" });
+
   const [inventario, setInventario] = useState(() => {
     const saved = localStorage.getItem("grenoucerie_inventario");
     return saved
@@ -2175,7 +2183,13 @@ function App() {
                         {t.type && <span style={{ fontSize: "0.7rem", background: "#e8f5e9", color: "#2e7d32", borderRadius: "8px", padding: "0 5px" }}>{t.type}</span>}
                       </div>
                       {tienePlan && <div style={{ fontSize: "0.72rem", color: "#555", marginTop: "1px" }}>💊 {planResumen}</div>}
-                      {esAlarma && <div style={{ fontSize: "0.72rem", color: "#e74c3c", fontWeight: "bold" }}>⚠️ 2ª dosis pendiente</div>}
+                      {esAlarma && (() => {
+                        const info = alarmas2aDosis.find(a => a.tanqueId === t.id);
+                        if (!info) return <div style={{ fontSize: "0.72rem", color: "#e74c3c", fontWeight: "bold" }}>⚠️ 2ª dosis pendiente</div>;
+                        return <div style={{ fontSize: "0.72rem", color: info.vencida ? "#c0392b" : "#e67e22", fontWeight: "bold" }}>
+                          {info.vencida ? `🔴 2ª dosis VENCIDA (hace ${Math.abs(info.diasParaVencer)}d) — ${info.producto}` : `⚠️ 2ª dosis en ${info.diasParaVencer}d — ${info.producto}`}
+                        </div>;
+                      })()}
                     </div>
                   </label>
                 );
@@ -3375,6 +3389,18 @@ function App() {
         console.log("Error al cargar bajas. Probablemente la tabla no exista aún.", err);
       }
 
+      // 3d. Cargar notas de pizarra
+      let notasNube = [];
+      try {
+        const resNotas = await fetch(
+          `${config.url}/rest/v1/notas_pizarra?select=*&order=created_at.desc`,
+          { headers: { apikey: config.key, Authorization: `Bearer ${config.key}` } },
+        );
+        if (resNotas.ok) notasNube = await resNotas.json();
+      } catch (err) {
+        console.log("Error al cargar notas pizarra. Probablemente la tabla no exista aún.", err);
+      }
+
       // 4. Cargar inventario (Con try/catch separado por si la tabla aún no existe)
       try {
         const resInv = await fetch(
@@ -3536,7 +3562,18 @@ function App() {
         const soloLocales = prev.filter(i => !nubeIds.has(String(i.id)));
         return [...incidenciasNube, ...soloLocales];
       });
-      if (bajasNube.length > 0) setBajasCloud(bajasNube);
+      setBajasCloud(prev => {
+        if (bajasNube.length === 0) return prev;
+        const nubeKeys = new Set(bajasNube.map(b => `${b.fecha}_${b.cantidad}_${b.lote_id || ''}_${b.sexo || ''}`));
+        const soloLocales = prev.filter(b => !nubeKeys.has(`${b.fecha}_${b.cantidad}_${b.lote_id || ''}_${b.sexo || ''}`));
+        return [...bajasNube, ...soloLocales];
+      });
+      setNotasPizarra(prev => {
+        if (notasNube.length === 0) return prev;
+        const nubeIds = new Set(notasNube.map(n => String(n.id)));
+        const soloLocales = prev.filter(n => !nubeIds.has(String(n.id)));
+        return [...notasNube, ...soloLocales];
+      });
       setIsCloudConnected(true);
       cargarPlanesDesdeNube();
     } catch (err) {
@@ -3688,6 +3725,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem("grenoucerie_incidencias", JSON.stringify(incidencias));
   }, [incidencias]);
+
+  useEffect(() => {
+    localStorage.setItem("grenoucerie_notas_pizarra", JSON.stringify(notasPizarra));
+  }, [notasPizarra]);
 
   useEffect(() => {
     localStorage.setItem("grenoucerie_inventario", JSON.stringify(inventario));
@@ -4060,6 +4101,73 @@ function App() {
     }
   };
 
+  // ── PIZARRA DE COMUNICACIÓN ──────────────────────────────────
+  const AREAS_PIZARRA = ["General", "UCI", "Nave Verde", "Metamorfoseadas", "Renacuajos", "Incubadoras", "Invernadero"];
+
+  const guardarNotaPizarra = async () => {
+    if (!formNota.texto.trim()) return;
+    const nueva = {
+      id: Date.now(),
+      texto: formNota.texto.trim(),
+      area: formNota.area,
+      prioridad: formNota.prioridad,
+      autor: formNota.autor.trim() || "Anónimo",
+      pinned: false,
+      created_at: new Date().toISOString(),
+    };
+    setNotasPizarra(prev => [nueva, ...prev]);
+    setFormNota({ texto: "", area: "General", prioridad: "normal", autor: formNota.autor });
+    setShowFormNota(false);
+
+    if (isCloudConnected) {
+      try {
+        const res = await fetch(`${cloudConfig.url}/rest/v1/notas_pizarra`, {
+          method: "POST",
+          headers: { ...obtenerCabeceras(), Prefer: "resolution=merge-duplicates" },
+          body: JSON.stringify(nueva),
+        });
+        if (!res.ok) {
+          const errBody = await res.text().catch(() => "");
+          if (errBody.includes("notas_pizarra")) {
+            setCloudSaveError("Tabla notas_pizarra no existe. Créala en Supabase con el SQL proporcionado.");
+          }
+        }
+      } catch (err) {
+        console.error("Error al guardar nota en la nube:", err);
+      }
+    }
+  };
+
+  const togglePinNota = async (id) => {
+    setNotasPizarra(prev => prev.map(n => n.id === id ? { ...n, pinned: !n.pinned } : n));
+    if (isCloudConnected) {
+      const nota = notasPizarra.find(n => n.id === id);
+      try {
+        await fetch(`${cloudConfig.url}/rest/v1/notas_pizarra?id=eq.${id}`, {
+          method: "PATCH",
+          headers: obtenerCabeceras(),
+          body: JSON.stringify({ pinned: !nota?.pinned }),
+        });
+      } catch (err) {
+        console.error("Error al fijar nota:", err);
+      }
+    }
+  };
+
+  const borrarNotaPizarra = async (id) => {
+    setNotasPizarra(prev => prev.filter(n => n.id !== id));
+    if (isCloudConnected) {
+      try {
+        await fetch(`${cloudConfig.url}/rest/v1/notas_pizarra?id=eq.${id}`, {
+          method: "DELETE",
+          headers: obtenerCabeceras(),
+        });
+      } catch (err) {
+        console.error("Error al borrar nota:", err);
+      }
+    }
+  };
+
   const updateField = async (grupo, id, field, value) => {
     const itemAfectado = data[grupo].find((item) => item.id === id);
     if (!itemAfectado) return;
@@ -4368,7 +4476,7 @@ function App() {
   const obtenerBajasPorFecha = (fechaNorm) => {
     if (bajasCloud.length > 0) {
       return bajasCloud
-        .filter((b) => b.fecha === fechaNorm)
+        .filter((b) => normalizarFecha(b.fecha) === fechaNorm)
         .reduce((sum, b) => sum + (parseInt(b.cantidad, 10) || 0), 0);
     }
     return tratamientos
@@ -5965,47 +6073,82 @@ function App() {
   };
 
   // Logica de Alarma de Desparasitacion
+  const INTERVALO_2A_DOSIS = 7;
+  const PRODUCTOS_2A_DOSIS = ["levamisol", "sal", "desparasit", "veterelin"];
+
+  const parseFechaTrat = (fechaStr) => {
+    if (!fechaStr) return null;
+    const partsSlash = fechaStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (partsSlash) return new Date(partsSlash[3], partsSlash[2] - 1, partsSlash[1]);
+    const partsISO = fechaStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (partsISO) return new Date(partsISO[1], partsISO[2] - 1, partsISO[3]);
+    return null;
+  };
+
   const obtenerAlarmasTratamientos = () => {
     const alarmas = [];
     const hoy = new Date();
-    
-    // Buscar tratamientos de desparasitacion externa (primera dosis)
-    const desparasitaciones = tratamientos.filter(t => 
-      t.tipo && t.tipo.toLowerCase().includes("desparasita") && t.tipo.toLowerCase().includes("externa")
-    );
-    
-    // Agrupar por tanque y fecha
-    const tratsPorTanque = {};
-    desparasitaciones.forEach(t => {
-      if (!tratsPorTanque[t.tanque]) tratsPorTanque[t.tanque] = [];
-      tratsPorTanque[t.tanque].push(t);
+    hoy.setHours(0, 0, 0, 0);
+
+    const requiere2aDosis = (t) => {
+      const tipo = (t.tipo || "").toLowerCase();
+      const cat = (t.categoria || "").toLowerCase();
+      if (parseInt(t.numDosis, 10) > 1) return true;
+      if (cat.includes("desparasit")) return true;
+      return PRODUCTOS_2A_DOSIS.some(p => tipo.includes(p));
+    };
+
+    const candidatos = tratamientos.filter(t => t.tipo && requiere2aDosis(t));
+
+    const porTanqueProducto = {};
+    candidatos.forEach(t => {
+      const producto = (t.tipo || "").toLowerCase().trim();
+      const key = `${t.tanque}||${producto}`;
+      if (!porTanqueProducto[key]) porTanqueProducto[key] = [];
+      porTanqueProducto[key].push(t);
     });
 
-    Object.keys(tratsPorTanque).forEach(tanqueId => {
-      // Ordenar por fecha descendente
-      const trats = tratsPorTanque[tanqueId].sort((a, b) => {
-        const [dA, mA, yA] = a.fecha.split('/');
-        const [dB, mB, yB] = b.fecha.split('/');
-        return new Date(yB, mB - 1, dB) - new Date(yA, mA - 1, dA);
+    Object.entries(porTanqueProducto).forEach(([key, trats]) => {
+      const sorted = trats.sort((a, b) => {
+        const fA = parseFechaTrat(a.fecha);
+        const fB = parseFechaTrat(b.fecha);
+        return (fB || 0) - (fA || 0);
       });
 
-      if (trats.length > 0) {
-        const ultimoTrat = trats[0];
-        const [d, m, y] = ultimoTrat.fecha.split('/');
-        const fechaUltimo = new Date(y, m - 1, d);
-        const diasPasados = Math.floor((hoy - fechaUltimo) / (1000 * 60 * 60 * 24));
-        
-        // Si hace entre 6 y 8 dias que se dio una desparasitacion
-        if (diasPasados >= 6 && diasPasados <= 8) {
-          alarmas.push(tanqueId);
+      if (sorted.length >= 2) {
+        const f1 = parseFechaTrat(sorted[1].fecha);
+        const f2 = parseFechaTrat(sorted[0].fecha);
+        if (f1 && f2) {
+          const diasEntre = Math.floor((f2 - f1) / (1000 * 60 * 60 * 24));
+          if (diasEntre >= 5 && diasEntre <= 10) return;
         }
+      }
+
+      const primera = sorted[sorted.length === 1 ? 0 : sorted.length - 1];
+      const fechaPrimera = parseFechaTrat(primera.fecha);
+      if (!fechaPrimera) return;
+
+      const diasPasados = Math.floor((hoy - fechaPrimera) / (1000 * 60 * 60 * 24));
+      const diasParaVencer = INTERVALO_2A_DOSIS - diasPasados;
+      const tanqueId = key.split("||")[0];
+
+      if (diasPasados >= 5 && sorted.length < 2) {
+        alarmas.push({
+          tanqueId,
+          producto: primera.tipo,
+          fechaPrimera: primera.fecha,
+          diasPasados,
+          diasParaVencer,
+          vencida: diasParaVencer < 0,
+        });
       }
     });
 
     return alarmas;
   };
 
-  const alarmasDesparasitacion = obtenerAlarmasTratamientos() || [];
+  const alarmas2aDosis = obtenerAlarmasTratamientos() || [];
+  const alarmasDesparasitacion = alarmas2aDosis.map(a => a.tanqueId);
 
   // --- CALCULOS PARA RESUMEN GLOBAL ---
   const getResumenGlobal = () => {
@@ -6462,16 +6605,164 @@ function App() {
             </div>
           </div>
 
+          {/* ── 1b. PIZARRA DE COMUNICACIÓN ──────────────────────── */}
+          <div style={{
+            background: "#fff",
+            borderRadius: "14px",
+            padding: "1rem 1.2rem",
+            marginBottom: "1rem",
+            borderLeft: "6px solid var(--oliva)",
+            boxShadow: "var(--sombra)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
+              <h3 style={{ margin: 0, fontSize: "1rem", color: "var(--oliva)" }}>📋 Pizarra de Comunicación</h3>
+              <button
+                className="btn-puesta"
+                onClick={() => setShowFormNota(!showFormNota)}
+                style={{ padding: "0.3rem 0.8rem", fontSize: "0.8rem" }}
+              >
+                {showFormNota ? "✕ Cerrar" : "+ Nueva Nota"}
+              </button>
+            </div>
+
+            {showFormNota && (
+              <div style={{
+                background: "#f8f9fa",
+                borderRadius: "10px",
+                padding: "0.8rem",
+                marginBottom: "0.8rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.5rem",
+              }}>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <input
+                    type="text"
+                    placeholder="Tu nombre"
+                    value={formNota.autor}
+                    onChange={(e) => setFormNota({ ...formNota, autor: e.target.value })}
+                    style={{ padding: "0.4rem", borderRadius: "6px", border: "1px solid #ccc", flex: "1 1 120px", fontSize: "0.85rem" }}
+                  />
+                  <select
+                    value={formNota.area}
+                    onChange={(e) => setFormNota({ ...formNota, area: e.target.value })}
+                    style={{ padding: "0.4rem", borderRadius: "6px", border: "1px solid #ccc", fontSize: "0.85rem" }}
+                  >
+                    {AREAS_PIZARRA.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                  <select
+                    value={formNota.prioridad}
+                    onChange={(e) => setFormNota({ ...formNota, prioridad: e.target.value })}
+                    style={{ padding: "0.4rem", borderRadius: "6px", border: "1px solid #ccc", fontSize: "0.85rem" }}
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="importante">Importante</option>
+                    <option value="urgente">Urgente</option>
+                  </select>
+                </div>
+                <textarea
+                  placeholder="Escribe tu mensaje para el equipo..."
+                  value={formNota.texto}
+                  onChange={(e) => setFormNota({ ...formNota, texto: e.target.value })}
+                  rows={2}
+                  style={{ padding: "0.4rem", borderRadius: "6px", border: "1px solid #ccc", fontSize: "0.85rem", resize: "vertical" }}
+                />
+                <button
+                  className="btn-guardar"
+                  onClick={guardarNotaPizarra}
+                  style={{ alignSelf: "flex-end", padding: "0.4rem 1.2rem", fontSize: "0.85rem" }}
+                >
+                  Publicar
+                </button>
+              </div>
+            )}
+
+            {notasPizarra.length === 0 ? (
+              <p style={{ textAlign: "center", color: "#999", fontSize: "0.85rem", margin: "0.5rem 0" }}>
+                Sin notas. Deja un mensaje para el equipo.
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", maxHeight: "280px", overflowY: "auto" }}>
+                {[...notasPizarra]
+                  .sort((a, b) => {
+                    if (a.pinned && !b.pinned) return -1;
+                    if (!a.pinned && b.pinned) return 1;
+                    const prioOrder = { urgente: 0, importante: 1, normal: 2 };
+                    const pa = prioOrder[a.prioridad] ?? 2;
+                    const pb = prioOrder[b.prioridad] ?? 2;
+                    if (pa !== pb) return pa - pb;
+                    return new Date(b.created_at) - new Date(a.created_at);
+                  })
+                  .map(nota => {
+                    const bgColor = nota.prioridad === "urgente" ? "#fdecea" : nota.prioridad === "importante" ? "#fef9e7" : "#f8f9fa";
+                    const borderColor = nota.prioridad === "urgente" ? "#e74c3c" : nota.prioridad === "importante" ? "#f39c12" : "#ddd";
+                    const prioIcon = nota.prioridad === "urgente" ? "🔴" : nota.prioridad === "importante" ? "🟡" : "";
+                    const fechaNota = nota.created_at ? new Date(nota.created_at).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+                    return (
+                      <div key={nota.id} style={{
+                        background: bgColor,
+                        border: `1px solid ${borderColor}`,
+                        borderRadius: "8px",
+                        padding: "0.5rem 0.7rem",
+                        display: "flex",
+                        gap: "0.5rem",
+                        alignItems: "flex-start",
+                        position: "relative",
+                      }}>
+                        {nota.pinned && <span style={{ position: "absolute", top: "-6px", right: "6px", fontSize: "0.7rem" }}>📌</span>}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.2rem" }}>
+                            {prioIcon && <span style={{ fontSize: "0.65rem" }}>{prioIcon}</span>}
+                            <span style={{
+                              background: "var(--oliva)",
+                              color: "white",
+                              borderRadius: "4px",
+                              padding: "1px 6px",
+                              fontSize: "0.65rem",
+                              fontWeight: "600",
+                            }}>{nota.area}</span>
+                            <span style={{ fontSize: "0.7rem", color: "#888" }}>{nota.autor} · {fechaNota}</span>
+                          </div>
+                          <p style={{ margin: 0, fontSize: "0.85rem", color: "#333", whiteSpace: "pre-wrap" }}>{nota.texto}</p>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "2px", flexShrink: 0 }}>
+                          <button
+                            onClick={() => togglePinNota(nota.id)}
+                            title={nota.pinned ? "Desfijar" : "Fijar"}
+                            style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.75rem", padding: "2px" }}
+                          >{nota.pinned ? "📌" : "📍"}</button>
+                          <button
+                            onClick={() => { if (window.confirm("¿Borrar esta nota?")) borrarNotaPizarra(nota.id); }}
+                            title="Borrar"
+                            style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.75rem", padding: "2px" }}
+                          >🗑️</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+
           {/* ── 2. FRANJA DE ALERTAS (sólo visible si hay algo) ─────── */}
           {(() => {
             const alertas = [];
 
-            // Alarma 2ª dosis desparasitación
-            if (alarmasDesparasitacion.length > 0) {
+            // Alarma 2ª dosis
+            const vencidas2a = alarmas2aDosis.filter(a => a.vencida);
+            const proximas2a = alarmas2aDosis.filter(a => !a.vencida);
+            if (vencidas2a.length > 0) {
               alertas.push({
                 nivel: "critico",
+                icono: "🔴",
+                texto: `2ª dosis VENCIDA: ${vencidas2a.map(a => `${a.tanqueId} (${a.producto}, hace ${Math.abs(a.diasParaVencer)}d)`).join(", ")}`,
+              });
+            }
+            if (proximas2a.length > 0) {
+              alertas.push({
+                nivel: "advertencia",
                 icono: "💉",
-                texto: `2ª dosis requerida: ${alarmasDesparasitacion.join(", ")}`,
+                texto: `2ª dosis próxima: ${proximas2a.map(a => `${a.tanqueId} (${a.producto}, en ${a.diasParaVencer}d)`).join(", ")}`,
               });
             }
 
@@ -6968,19 +7259,38 @@ function App() {
               💀 Histórico de Movimientos (Bajas, Traslados y Salidas)
             </h2>
             <TableHistory
-              items={tratamientos.filter((t) => {
-                const tipo = (t.tipo || "").toLowerCase();
-                return (
-                  tipo.includes("baja") || 
-                  tipo.includes("traslado") || 
-                  tipo.includes("salida") || 
-                  tipo.includes("ajuste") ||
-                  tipo.includes("ingreso") ||
-                  tipo.includes("actualizaci")
-                );
-              })}
+              items={(() => {
+                const movLegacy = tratamientos.filter((t) => {
+                  const tipo = (t.tipo || "").toLowerCase();
+                  return (
+                    tipo.includes("traslado") ||
+                    tipo.includes("salida") ||
+                    tipo.includes("ajuste") ||
+                    tipo.includes("ingreso") ||
+                    tipo.includes("actualizaci")
+                  );
+                });
+                const bajasItems = bajasCloud.length > 0
+                  ? bajasCloud.map((b, i) => ({
+                      id: `baja-cloud-${i}`,
+                      fecha: normalizarFecha(b.fecha),
+                      hora: "",
+                      tanque: b.sexo ? `${b.sexo}` : "—",
+                      tipo: `Baja${b.causa ? " — " + b.causa : ""}`,
+                      dosis: String(b.cantidad || 0),
+                    }))
+                  : tratamientos.filter((t) => (t.tipo || "").toLowerCase().includes("baja"));
+                const toSortable = (f) => {
+                  if (!f) return "";
+                  const m = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                  return m ? `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}` : f;
+                };
+                return [...bajasItems, ...movLegacy].sort((a, b) => toSortable(b.fecha).localeCompare(toSortable(a.fecha)));
+              })()}
               onBorrar={(id) =>
-                borrarItem(tratamientos, setTratamientos, id, "tratamiento")
+                typeof id === "string" && id.startsWith("baja-cloud-")
+                  ? null
+                  : borrarItem(tratamientos, setTratamientos, id, "tratamiento")
               }
               isPuesta={false}
             />
