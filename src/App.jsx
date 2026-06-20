@@ -6397,7 +6397,7 @@ function App() {
             <div style={{ width: "1px", height: "44px", background: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
 
             {/* Puestas */}
-            <div style={{ textAlign: "center", flex: "1 1 90px" }}>
+            <div onClick={() => setActiveTab("incubadoras")} style={{ textAlign: "center", flex: "1 1 90px", cursor: "pointer", borderRadius: "8px", padding: "0.3rem", transition: "background 0.2s" }} onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.08)"} onMouseLeave={e => e.currentTarget.style.background="transparent"}>
               <div style={{ fontSize: "1.7rem", fontWeight: "800", lineHeight: 1, color: "#f1c40f" }}>{resumen.puestasSemana}</div>
               <div style={{ fontSize: "0.65rem", opacity: 0.65, textTransform: "uppercase", marginTop: "2px" }}>🥚 puestas / 7d</div>
               {resumen.puestasHoy > 0 && <div style={{ fontSize: "0.6rem", color: "#f1c40f", marginTop: "2px" }}>+{resumen.puestasHoy} hoy</div>}
@@ -6406,7 +6406,7 @@ function App() {
             <div style={{ width: "1px", height: "44px", background: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
 
             {/* Bajas */}
-            <div style={{ textAlign: "center", flex: "1 1 90px" }}>
+            <div onClick={() => setActiveTab("historial")} style={{ textAlign: "center", flex: "1 1 90px", cursor: "pointer", borderRadius: "8px", padding: "0.3rem", transition: "background 0.2s" }} onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.08)"} onMouseLeave={e => e.currentTarget.style.background="transparent"}>
               <div style={{ fontSize: "1.7rem", fontWeight: "800", lineHeight: 1, color: bajasHoy > 0 ? "#e74c3c" : "#aaa" }}>{bajasHoy}</div>
               <div style={{ fontSize: "0.65rem", opacity: 0.65, textTransform: "uppercase", marginTop: "2px" }}>💀 bajas hoy</div>
               {bajasHoy > 0 && <div style={{ fontSize: "0.6rem", color: "#e74c3c", marginTop: "2px" }}>{pctBajasHoy}% censo · ayer {bajasAyer}</div>}
@@ -6415,7 +6415,7 @@ function App() {
             <div style={{ width: "1px", height: "44px", background: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
 
             {/* Tratamientos */}
-            <div style={{ textAlign: "center", flex: "1 1 90px" }}>
+            <div onClick={() => setActiveTab("tratamientos")} style={{ textAlign: "center", flex: "1 1 90px", cursor: "pointer", borderRadius: "8px", padding: "0.3rem", transition: "background 0.2s" }} onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.08)"} onMouseLeave={e => e.currentTarget.style.background="transparent"}>
               <div style={{ fontSize: "1.7rem", fontWeight: "800", lineHeight: 1, color: "#3498db" }}>{resumen.tratamientosSemana}</div>
               <div style={{ fontSize: "0.65rem", opacity: 0.65, textTransform: "uppercase", marginTop: "2px" }}>💊 trat. / 7d</div>
               {resumen.tratamientosHoy > 0 && <div style={{ fontSize: "0.6rem", color: "#3498db", marginTop: "2px" }}>+{resumen.tratamientosHoy} hoy</div>}
