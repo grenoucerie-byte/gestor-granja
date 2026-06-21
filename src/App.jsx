@@ -4117,6 +4117,12 @@ function App() {
           🐸 Ranas Adultas
         </button>
         <button
+          className={`nav-btn ${activeTab === "uci" ? "active" : ""}`}
+          onClick={() => setActiveTab("uci")}
+        >
+          🏥 UCI / Nave Verde
+        </button>
+        <button
           className={`nav-btn ${activeTab === "reproduccion" ? "active" : ""}`}
           onClick={() => setActiveTab("reproduccion")}
         >
@@ -4763,6 +4769,12 @@ function App() {
       {activeTab === "adultos" && (
         <div className="tab-content" style={{ animation: "fadeIn 0.3s ease" }}>
           <AdultasGrid data={data.adultas} handleCellClick={handleCellClick} />
+        </div>
+      )}
+
+      {/* Sección UCI / Nave Verde */}
+      {activeTab === "uci" && (
+        <div className="tab-content" style={{ animation: "fadeIn 0.3s ease" }}>
           <UCIGrid data={data.naveVerde} handleCellClick={handleCellClick} planesFase={planesFase} />
         </div>
       )}
