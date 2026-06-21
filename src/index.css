@@ -917,3 +917,246 @@ input:focus, textarea:focus {
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
   border-radius: 4px;
 }
+
+/* ── RESPONSIVE / MÓVIL ──────────────────────────────────────── */
+@media (max-width: 768px) {
+  .app-container {
+    padding: 0.5rem;
+  }
+
+  header {
+    padding: 1rem;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  /* Navbar: scroll horizontal, botones compactos */
+  .navbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.3rem;
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+    justify-content: flex-start;
+    scrollbar-width: thin;
+  }
+
+  .nav-btn {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.6rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Separadores de nave: ocultos en móvil */
+  .navbar > span {
+    display: none;
+  }
+
+  /* Secciones y tarjetas */
+  .group-section {
+    padding: 0.8rem;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+  }
+
+  .group-title {
+    font-size: 1.1rem;
+    padding-left: 0.6rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .structure-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-fields.three-cols {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .card-top {
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .btn-group {
+    gap: 0.3rem;
+  }
+
+  .btn-baja, .btn-puesta, .btn-trat {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+  }
+
+  /* Grids de renacuajos: scroll horizontal */
+  .grid-wrapper {
+    padding: 0.5rem;
+    border-radius: 10px;
+  }
+
+  .grid-cols-label, .grid-row-container {
+    min-width: 600px;
+    gap: 4px;
+  }
+
+  .grid-cell {
+    min-height: 70px;
+    font-size: 0.65rem;
+    padding: 2px;
+  }
+
+  .grid-cell-count {
+    font-size: 0.75rem;
+  }
+
+  /* Pasillo layout: vertical en móvil */
+  .pasillo-central-layout {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .pasillo-visual {
+    min-height: auto;
+    height: 30px;
+    writing-mode: horizontal-tb;
+    border-left: none;
+    border-right: none;
+    border-top: 2px dashed #7f8fa6;
+    border-bottom: 2px dashed #7f8fa6;
+  }
+
+  .pasillo-text {
+    writing-mode: horizontal-tb;
+    text-orientation: mixed;
+    letter-spacing: 8px;
+    font-size: 0.8rem;
+  }
+
+  .pasillo {
+    text-align: center;
+    padding: 0.3rem;
+    font-size: 0.7rem;
+    color: #888;
+  }
+
+  /* UCI layout: vertical */
+  .uci-layout {
+    flex-direction: column;
+    padding: 8px;
+    gap: 10px;
+  }
+
+  .uci-corrales {
+    margin-top: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .corral-cell {
+    height: auto;
+    min-width: 120px;
+  }
+
+  .uci-right-col {
+    flex-direction: row;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* Estructura tabs: scroll horizontal */
+  .estructura-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start;
+    gap: 0.3rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .estructura-tab-btn {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.7rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Tablas: scroll horizontal */
+  .history-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .history-table th, .history-table td {
+    padding: 0.5rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  /* Modal */
+  .modal-content {
+    padding: 1.2rem;
+    border-radius: 14px;
+    width: 95%;
+  }
+
+  /* Dashboard hero banner */
+  .tab-content > div:first-child {
+    padding: 0.8rem !important;
+    border-radius: 10px !important;
+  }
+
+  /* Stats grid */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.8rem;
+  }
+
+  .stat-card {
+    padding: 0.8rem;
+  }
+
+  .stat-value {
+    font-size: 1.3rem;
+  }
+
+  /* Metamorfoseadas / Adultas container */
+  .metamorfosis-container {
+    padding: 8px;
+  }
+
+  /* Backup controls */
+  .backup-controls {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+}
+
+/* Pantallas muy pequeñas (< 400px) */
+@media (max-width: 400px) {
+  .card-fields, .card-fields.three-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-cols-label, .grid-row-container {
+    min-width: 500px;
+    gap: 3px;
+    grid-template-columns: 30px repeat(9, 1fr);
+  }
+
+  .grid-cell {
+    min-height: 55px;
+  }
+
+  .nav-btn {
+    font-size: 0.7rem;
+    padding: 0.35rem 0.5rem;
+  }
+}

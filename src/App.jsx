@@ -7,6 +7,7 @@ import { UCIGrid, ReproduccionGrid, LaboratorioGrid, InvernaderoGrid, BrumacionG
 import IncidenciasPanel from "./components/IncidenciasPanel";
 import TratamientosMasivos from "./components/TratamientosMasivos";
 import AlimentacionPanel from "./components/AlimentacionPanel";
+import DashboardMetricas from "./components/DashboardMetricas";
 import { PRODUCTOS_DEFAULT, PLANES_FASE_DEFAULT, AREAS_PIZARRA, INTERVALO_2A_DOSIS, PRODUCTOS_2A_DOSIS, OBTENER_DATOS_DENSIDAD } from "./constants";
 import { normalizarId, lockIcon, lockClass, parseSubgrupos, serializeSubgrupos, normalizarFecha, getFechaHoyNorm, getFechaAyerNorm, parseCellId, parseFechaTrat } from "./utils";
 
@@ -4103,52 +4104,49 @@ function App() {
 
       {/* Menú de Pestañas Superior */}
       <nav className="navbar">
-        <button
-          className={`nav-btn ${activeTab === "dashboard" ? "active" : ""}`}
-          onClick={() => setActiveTab("dashboard")}
-        >
+        <button className={`nav-btn ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => setActiveTab("dashboard")}>
           📊 Tablero de Mando
         </button>
-        <button
-          className={`nav-btn ${activeTab === "adultos" ? "active" : ""}`}
-          onClick={() => setActiveTab("adultos")}
-        >
-          🐸 Ranas Adultas
+
+        {/* ── NAVE CRÍA ── */}
+        <span style={{ fontSize: "0.6rem", color: "#999", textTransform: "uppercase", padding: "0 0.3rem", alignSelf: "center", letterSpacing: "1px" }}>Nave Cría</span>
+        <button className={`nav-btn ${activeTab === "adultos" ? "active" : ""}`} onClick={() => setActiveTab("adultos")}>
+          🐸 Adultas
         </button>
-        <button
-          className={`nav-btn ${activeTab === "reproduccion" ? "active" : ""}`}
-          onClick={() => setActiveTab("reproduccion")}
-        >
-          💕 Reproducción
+        <button className={`nav-btn ${activeTab === "renacuajos" ? "active" : ""}`} onClick={() => setActiveTab("renacuajos")}>
+          🦠 Renacuajos
         </button>
-        <button
-          className={`nav-btn ${activeTab === "laboratorio" ? "active" : ""}`}
-          onClick={() => setActiveTab("laboratorio")}
-        >
-          🔬 Laboratorio
-        </button>
-        <button
-          className={`nav-btn ${activeTab === "invernadero" ? "active" : ""}`}
-          onClick={() => setActiveTab("invernadero")}
-        >
-          🪴 Invernadero
-        </button>
-        <button
-          className={`nav-btn ${activeTab === "brumacion" ? "active" : ""}`}
-          onClick={() => setActiveTab("brumacion")}
-        >
-          ❄️ Brumación
-        </button>
-        <button
-          className={`nav-btn ${activeTab === "incubadoras" ? "active" : ""}`}
-          onClick={() => setActiveTab("incubadoras")}
-        >
+        <button className={`nav-btn ${activeTab === "incubadoras" ? "active" : ""}`} onClick={() => setActiveTab("incubadoras")}>
           🥚 Incubadoras
         </button>
-        <button
-          className={`nav-btn ${activeTab === "tratamientos" ? "active" : ""}`}
-          onClick={() => setActiveTab("tratamientos")}
-        >
+        <button className={`nav-btn ${activeTab === "reproduccion" ? "active" : ""}`} onClick={() => setActiveTab("reproduccion")}>
+          💕 Reproducción
+        </button>
+
+        {/* ── ADJUNTAS (Labo + Bruma) ── */}
+        <span style={{ fontSize: "0.6rem", color: "#999", textTransform: "uppercase", padding: "0 0.3rem", alignSelf: "center", letterSpacing: "1px" }}>Adjuntas</span>
+        <button className={`nav-btn ${activeTab === "laboratorio" ? "active" : ""}`} onClick={() => setActiveTab("laboratorio")}>
+          🔬 Laboratorio
+        </button>
+        <button className={`nav-btn ${activeTab === "brumacion" ? "active" : ""}`} onClick={() => setActiveTab("brumacion")}>
+          ❄️ Brumación
+        </button>
+
+        {/* ── NAVE VERDE ── */}
+        <span style={{ fontSize: "0.6rem", color: "#999", textTransform: "uppercase", padding: "0 0.3rem", alignSelf: "center", letterSpacing: "1px" }}>Nave Verde</span>
+        <button className={`nav-btn ${activeTab === "uci" ? "active" : ""}`} onClick={() => setActiveTab("uci")}>
+          🏥 UCI
+        </button>
+
+        {/* ── INVERNADERO ── */}
+        <span style={{ fontSize: "0.6rem", color: "#999", textTransform: "uppercase", padding: "0 0.3rem", alignSelf: "center", letterSpacing: "1px" }}>Invernadero</span>
+        <button className={`nav-btn ${activeTab === "invernadero" ? "active" : ""}`} onClick={() => setActiveTab("invernadero")}>
+          🪴 Invernadero
+        </button>
+
+        {/* ── GESTIÓN ── */}
+        <span style={{ fontSize: "0.6rem", color: "#999", textTransform: "uppercase", padding: "0 0.3rem", alignSelf: "center", letterSpacing: "1px" }}>Gestión</span>
+        <button className={`nav-btn ${activeTab === "tratamientos" ? "active" : ""}`} onClick={() => setActiveTab("tratamientos")}>
           💊 Tratamientos
         </button>
         <button
@@ -4158,42 +4156,21 @@ function App() {
         >
           🚨 Incidencias{incidencias.filter(i => i.estado !== "Cerrada").length > 0 ? ` (${incidencias.filter(i => i.estado !== "Cerrada").length})` : ""}
         </button>
-        <button
-          className={`nav-btn ${activeTab === "renacuajos" ? "active" : ""}`}
-          onClick={() => setActiveTab("renacuajos")}
-        >
-          🦠 Renacuajos
-        </button>
-        <button
-          className={`nav-btn ${activeTab === "historial" ? "active" : ""}`}
-          onClick={() => setActiveTab("historial")}
-        >
-          📋 Historiales y Reportes
-        </button>
-        <button
-          className={`nav-btn ${activeTab === "reportes" ? "active" : ""}`}
-          onClick={() => setActiveTab("reportes")}
-        >
-          📈 Exportar Excel
-        </button>
-        <button
-          className={`nav-btn ${activeTab === "alimentacion" ? "active" : ""}`}
-          onClick={() => setActiveTab("alimentacion")}
-          style={activeTab === "alimentacion" ? {} : { background: "#e8f5e9", color: "#2e7d32" }}
-        >
+        <button className={`nav-btn ${activeTab === "alimentacion" ? "active" : ""}`} onClick={() => setActiveTab("alimentacion")}
+          style={activeTab === "alimentacion" ? {} : { background: "#e8f5e9", color: "#2e7d32" }}>
           🌿 Alimentación
         </button>
-        <button
-          className={`nav-btn ${activeTab === "inventario" ? "active" : ""}`}
-          onClick={() => setActiveTab("inventario")}
-        >
+        <button className={`nav-btn ${activeTab === "historial" ? "active" : ""}`} onClick={() => setActiveTab("historial")}>
+          📋 Historiales
+        </button>
+        <button className={`nav-btn ${activeTab === "reportes" ? "active" : ""}`} onClick={() => setActiveTab("reportes")}>
+          📈 Exportar
+        </button>
+        <button className={`nav-btn ${activeTab === "inventario" ? "active" : ""}`} onClick={() => setActiveTab("inventario")}>
           📦 Almacén
         </button>
-        <button
-          className={`nav-btn ${activeTab === "config" ? "active" : ""}`}
-          onClick={() => setActiveTab("config")}
-        >
-          ⚙️ Ajustes de Nube
+        <button className={`nav-btn ${activeTab === "config" ? "active" : ""}`} onClick={() => setActiveTab("config")}>
+          ⚙️ Nube
         </button>
 
         {/* Indicador de estado de nube siempre visible */}
@@ -4721,7 +4698,13 @@ function App() {
             })()}
           </div>
 
-          {/* ── 4. ACTIVIDAD RECIENTE (2 columnas) ───────────────────── */}
+          {/* ── 4. MÉTRICAS OPERATIVAS ───────────────────────────────── */}
+          <DashboardMetricas
+            bajasCloud={bajasCloud} tratamientos={tratamientos} data={data}
+            planesFase={planesFase} registrosAlimentacion={registrosAlimentacion}
+          />
+
+          {/* ── 5. ACTIVIDAD RECIENTE (2 columnas) ───────────────────── */}
           <div className="recent-grid">
             <div className="recent-card">
               <h3>🥚 Últimas Puestas</h3>
@@ -4756,6 +4739,12 @@ function App() {
       {activeTab === "adultos" && (
         <div className="tab-content" style={{ animation: "fadeIn 0.3s ease" }}>
           <AdultasGrid data={data.adultas} handleCellClick={handleCellClick} />
+        </div>
+      )}
+
+      {/* Sección UCI / Nave Verde */}
+      {activeTab === "uci" && (
+        <div className="tab-content" style={{ animation: "fadeIn 0.3s ease" }}>
           <UCIGrid data={data.naveVerde} handleCellClick={handleCellClick} planesFase={planesFase} />
         </div>
       )}
