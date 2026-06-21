@@ -2153,7 +2153,7 @@ function App() {
       let bajasNube = [];
       try {
         const resBajas = await fetch(
-          `${config.url}/rest/v1/bajas?select=fecha,hora,tanque_id,cantidad,causa,sexo,lote_id&order=fecha.desc`,
+          `${config.url}/rest/v1/bajas?select=id,fecha,hora,tanque_id,cantidad,causa,sexo,lote_id&order=fecha.desc`,
           { headers: { apikey: config.key, Authorization: `Bearer ${config.key}` } },
         );
         if (resBajas.ok) bajasNube = await resBajas.json();
@@ -2336,8 +2336,8 @@ function App() {
       });
       setBajasCloud(prev => {
         if (bajasNube.length === 0) return prev;
-        const nubeKeys = new Set(bajasNube.map(b => `${b.fecha}_${b.cantidad}_${b.lote_id || ''}_${b.sexo || ''}`));
-        const soloLocales = prev.filter(b => !nubeKeys.has(`${b.fecha}_${b.cantidad}_${b.lote_id || ''}_${b.sexo || ''}`));
+        const nubeIds = new Set(bajasNube.map(b => b.id));
+        const soloLocales = prev.filter(b => !nubeIds.has(b.id));
         return [...bajasNube, ...soloLocales];
       });
       setNotasPizarra(prev => {
@@ -2580,7 +2580,7 @@ function App() {
     // Mantener bajasCloud sincronizado localmente
     const hoyISO = new Date().toISOString().split("T")[0];
     const horaISO = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-    setBajasCloud((prev) => [{ fecha: hoyISO, hora: horaISO, tanque_id: id, cantidad, causa: null, sexo: sexo || null, lote_id: itemAfectado.lote_id || null }, ...prev]);
+    setBajasCloud((prev) => [{ id: Date.now(), fecha: hoyISO, hora: horaISO, tanque_id: id, cantidad, causa: null, sexo: sexo || null, lote_id: itemAfectado.lote_id || null }, ...prev]);
 
     // Guardar en la nube si está conectado
     if (isCloudConnected) {
@@ -2921,6 +2921,20 @@ function App() {
         });
       } catch (err) {
         console.error("Error al fijar nota:", err);
+      }
+    }
+  };
+
+  const borrarBajaCloud = async (bajaId) => {
+    setBajasCloud(prev => prev.filter(b => b.id !== bajaId));
+    if (isCloudConnected) {
+      try {
+        await fetch(`${cloudConfig.url}/rest/v1/bajas?id=eq.${bajaId}`, {
+          method: "DELETE",
+          headers: obtenerCabeceras(),
+        });
+      } catch (err) {
+        console.error("Error al borrar baja en la nube:", err);
       }
     }
   };
@@ -5009,8 +5023,9 @@ function App() {
                   );
                 });
                 const bajasItems = bajasCloud.length > 0
-                  ? bajasCloud.map((b, i) => ({
-                      id: `baja-cloud-${i}`,
+                  ? bajasCloud.map((b) => ({
+                      id: `baja-cloud-${b.id}`,
+                      _bajaId: b.id,
                       fecha: normalizarFecha(b.fecha),
                       hora: b.hora || "",
                       tanque: b.tanque_id || (b.sexo ? `${b.sexo}` : "—"),
@@ -5025,11 +5040,14 @@ function App() {
                 };
                 return [...bajasItems, ...movLegacy].sort((a, b) => toSortable(b.fecha).localeCompare(toSortable(a.fecha)));
               })()}
-              onBorrar={(id) =>
-                typeof id === "string" && id.startsWith("baja-cloud-")
-                  ? null
-                  : borrarItem(tratamientos, setTratamientos, id, "tratamiento")
-              }
+              onBorrar={(id) => {
+                if (typeof id === "string" && id.startsWith("baja-cloud-")) {
+                  const bajaId = parseInt(id.replace("baja-cloud-", ""), 10);
+                  if (window.confirm("¿Borrar esta baja?")) borrarBajaCloud(bajaId);
+                } else {
+                  borrarItem(tratamientos, setTratamientos, id, "tratamiento");
+                }
+              }}
               isPuesta={false}
             />
           </div>
