@@ -5063,7 +5063,7 @@ function App() {
             bulkAlimItems={bulkAlimItems} setBulkAlimItems={setBulkAlimItems}
             bulkAlimFecha={bulkAlimFecha} setBulkAlimFecha={setBulkAlimFecha}
             bulkAlimTomas={bulkAlimTomas} setBulkAlimTomas={setBulkAlimTomas}
-            isCloudConnected={isCloudConnected} guardarPlanesEnNube={guardarPlanesEnNube}
+            isCloudConnected={isCloudConnected} guardarPlanesEnNube={syncPlanesNube}
             cloudConfig={cloudConfig} obtenerCabeceras={obtenerCabeceras} inventario={inventario}
           />
         </div>

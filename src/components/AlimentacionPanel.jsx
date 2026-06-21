@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-function AlimentacionPanel({ data, planesAlimentacion, setPlanesAlimentacion, planesFase, setPlanesFase, editandoFase, setEditandoFase, productosDisponibles, setProductosDisponibles, nuevoProd, setNuevoProd, registrosAlimentacion, setRegistrosAlimentacion, planesExpanded, setPlanesExpanded, planesFaseExpanded, setPlanesFaseExpanded, bulkAlimSelectedTanks, setBulkAlimSelectedTanks, bulkAlimItems, setBulkAlimItems, bulkAlimFecha, setBulkAlimFecha, bulkAlimTomas, setBulkAlimTomas, isCloudConnected, guardarPlanesEnNube, cloudConfig, obtenerCabeceras, inventario }) {
+function AlimentacionPanel({ data, planesAlimentacion = {}, setPlanesAlimentacion, planesFase = {}, setPlanesFase, editandoFase, setEditandoFase, productosDisponibles = [], setProductosDisponibles, nuevoProd = "", setNuevoProd, registrosAlimentacion = [], setRegistrosAlimentacion, planesExpanded, setPlanesExpanded, planesFaseExpanded, setPlanesFaseExpanded, bulkAlimSelectedTanks = [], setBulkAlimSelectedTanks, bulkAlimItems = [{ producto: "", gramos: "" }], setBulkAlimItems, bulkAlimFecha, setBulkAlimFecha, bulkAlimTomas = "1", setBulkAlimTomas, isCloudConnected, guardarPlanesEnNube, cloudConfig = {}, obtenerCabeceras, inventario = [] }) {
 
   // ─── Funciones del sistema de Alimentación ─────────────────────────────────
 
