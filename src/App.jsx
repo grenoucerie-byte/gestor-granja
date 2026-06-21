@@ -1,106 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./index.css";
 import ReportesExportar from "./components/ReportesExportar";
+import Section from "./components/Section";
+import TableHistory from "./components/TableHistory";
+import { PRODUCTOS_DEFAULT, PLANES_FASE_DEFAULT, AREAS_PIZARRA, INTERVALO_2A_DOSIS, PRODUCTOS_2A_DOSIS, OBTENER_DATOS_DENSIDAD } from "./constants";
+import { normalizarId, lockIcon, lockClass, parseSubgrupos, serializeSubgrupos, normalizarFecha, getFechaHoyNorm, getFechaAyerNorm, parseCellId, parseFechaTrat } from "./utils";
 
-// ── Catálogo de productos y planes por defecto ──────────────────────────────
-const PRODUCTOS_DEFAULT = [
-  "MICROBAQ T-0",
-  "AGUA VERDE",
-  "DAPHNIA",
-  "DIBAQ T 1MM",
-  "DIBAQ T 2MM",
-  "DIBAQ T 4.5MM",
-  "Alimento vivo pequeño",
-  "Alimento VIVO",
-  "CALCIO",
-  "PIENSO RAMIRO",
-];
-
-const _mk  = (p, tipo="fijo")  => ({ producto: p, cantidad: "", tomas: "1", tipo });
-const _mkF = (...ps)            => ps.map(p => _mk(p, "fijo"));
-const PLANES_FASE_DEFAULT = {
-  "Renacuajo S":      { items: [_mk("MICROBAQ T-0","fijo"), _mk("AGUA VERDE","ocasional"), _mk("DAPHNIA","ocasional")],                    frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
-  "Renacuajo M":      { items: [_mk("MICROBAQ T-0","fijo"), _mk("AGUA VERDE","ocasional"), _mk("DAPHNIA","ocasional")],                    frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
-  "2 patas":          { items: [_mk("MICROBAQ T-0","fijo"), _mk("AGUA VERDE","ocasional"), _mk("DAPHNIA","ocasional")],                    frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
-  "Recién metamorf.": { items: [_mk("DIBAQ T 2MM","fijo"), _mk("DIBAQ T 1MM","fijo"), _mk("Alimento vivo pequeño","ocasional"), _mk("CALCIO","ocasional")], frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
-  "Iniciación":       { items: [_mk("DIBAQ T 2MM","fijo"), _mk("DIBAQ T 1MM","fijo"), _mk("Alimento vivo pequeño","ocasional"), _mk("CALCIO","ocasional")], frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
-  "Juvenil":          { items: [_mk("DIBAQ T 2MM","fijo"), _mk("DIBAQ T 1MM","fijo"), _mk("Alimento vivo pequeño","ocasional"), _mk("CALCIO","ocasional")], frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
-  "Engorde":          { items: [_mk("DIBAQ T 4.5MM","fijo"), _mk("Alimento VIVO","ocasional"), _mk("CALCIO","ocasional"), _mk("PIENSO RAMIRO","ocasional")], frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
-  "Reproductora":     { items: [_mk("DIBAQ T 4.5MM","fijo"), _mk("Alimento VIVO","ocasional"), _mk("CALCIO","ocasional"), _mk("PIENSO RAMIRO","ocasional")], frecuencia:"Diario", modo:"fijos", tomasAl_dia:"2", notas:"" },
-};
 // ───────────────────────────────────────────────────────────────────────────
-
-// Función para normalizar los identificadores de celdas (elimina comillas y limpia espacios)
-const normalizarId = (id) => {
-  if (!id) return "";
-  return String(id).replace(/[^a-zA-Z0-9\-\.]/g, "");
-};
-
-// Icono y clase CSS del bloqueo según su motivo, para distinguir
-// visualmente desinfección/limpieza de un bloqueo genérico o de reparación.
-const lockIcon = (obs) => {
-  if (!obs || !obs.includes("[BLOQUEADO")) return "";
-  const motivo = (obs.match(/\[BLOQUEADO(?:[:-]?\s*(.*?))?\]/) || [])[1] || "";
-  const m = motivo.toLowerCase();
-  if (m.includes("desinfec") || m.includes("limpi")) return "🧴";
-  if (m.includes("repara")) return "🔧";
-  return "🔒";
-};
-const lockClass = (obs) => {
-  if (!obs || !obs.includes("[BLOQUEADO")) return "";
-  const motivo = (obs.match(/\[BLOQUEADO(?:[:-]?\s*(.*?))?\]/) || [])[1] || "";
-  const m = motivo.toLowerCase();
-  if (m.includes("desinfec") || m.includes("limpi")) return "locked desinfectar";
-  if (m.includes("repara")) return "locked reparar";
-  return "locked";
-};
-
-// Parsear y serializar desglose de subgrupos (sexo, estado, fechas)
-const parseSubgrupos = (obs) => {
-  if (!obs) return { subgrupos: [], comentario: "" };
-  let parts = String(obs).split("||");
-  let subData = parts[0].trim();
-  let comentario = parts.slice(1).join("||").trim();
-  
-  if (!subData.includes("♂") && !subData.includes("♀") && !subData.includes("❓")) {
-    // Legacy obs or just comment
-    return { subgrupos: [], comentario: obs.trim() };
-  }
-
-  const subgrupos = [];
-  const tokens = subData.split("|").map(t => t.trim()).filter(Boolean);
-  
-  tokens.forEach((token, index) => {
-    const match = token.match(/^(\d+)([♂♀❓])\[(.*?)\]\((.*?)\)$/);
-    if (match) {
-      const sexoMap = { "♂": "Macho", "♀": "Hembra", "❓": "Indet" };
-      subgrupos.push({
-        id: `sub_${Date.now()}_${index}`,
-        cantidad: parseInt(match[1], 10),
-        sexo: sexoMap[match[2]],
-        estado: match[3] || "Ninguno",
-        fecha: match[4] || ""
-      });
-    }
-  });
-
-  return { subgrupos, comentario };
-};
-
-const serializeSubgrupos = (subgrupos, comentario) => {
-  if (!subgrupos || subgrupos.length === 0) return comentario || "";
-  
-  const sexoMap = { "Macho": "♂", "Hembra": "♀", "Indet": "❓" };
-  const tokens = subgrupos.map(sg => {
-    return `${sg.cantidad}${sexoMap[sg.sexo] || "❓"}[${sg.estado || "Ninguno"}](${sg.fecha || ""})`;
-  });
-
-  let str = tokens.join(" | ");
-  if (comentario && comentario.trim().length > 0) {
-    str += " || " + comentario.trim();
-  }
-  return str;
-};
 
 // Generar celdas de incubadoras
 const generarCeldasIncubadoras = () => {
@@ -494,45 +400,6 @@ const asegurarEstructurasAdultas = (dataLocal, corruptosAccumulator) => {
   return deduplicatedList;
 };
 
-// Normalizar formato de fecha para comparaciones seguras (D/M/YYYY)
-const normalizarFecha = (fechaStr) => {
-  if (!fechaStr) return "";
-  const matchYMD = fechaStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (matchYMD) {
-    return `${parseInt(matchYMD[3], 10)}/${parseInt(matchYMD[2], 10)}/${matchYMD[1]}`;
-  }
-  const matchDMY = fechaStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (matchDMY) {
-    return `${parseInt(matchDMY[1], 10)}/${parseInt(matchDMY[2], 10)}/${matchDMY[3]}`;
-  }
-  return fechaStr;
-};
-
-// Obtener fecha de hoy normalizada
-const getFechaHoyNorm = () => {
-  const d = new Date();
-  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
-};
-
-// Obtener fecha de ayer normalizada
-const getFechaAyerNorm = () => {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
-};
-
-// Analizar ID de la celda de cuadrícula
-const parseCellId = (id) => {
-  const match = id.match(/^E(\d+)-F(\d+)-C(\d+)$/);
-  if (match) {
-    return {
-      estructura: match[1],
-      fila: match[2],
-      columna: match[3],
-    };
-  }
-  return null;
-};
 
 // Generar celdas para la Nave Verde (UCI)
 const generarCeldasUCI = () => {
@@ -906,59 +773,6 @@ const DEFAULT_DATA = {
 };
 
 // Métrica de densidad recomendada por tipo de población
-const OBTENER_DATOS_DENSIDAD = (grupo, id, count) => {
-  let maxRecomendado = 500;
-  let factorArea = 10; // metros cuadrados por defecto para raceways
-  let unidad = "ranas/m²";
-  let esGrid = false;
-
-  if (grupo === "adultas") {
-    maxRecomendado = 500;
-    factorArea = 10;
-    unidad = "ranas/m²";
-  } else if (grupo === "naveVerde") {
-    maxRecomendado = 200;
-    factorArea = 10;
-    unidad = "ranas/m²";
-  } else if (grupo === "renacuajos") {
-    esGrid = /^E\d-F\d-C\d+/.test(id);
-    if (esGrid) {
-      maxRecomendado = 300; // Capacidad máxima objetivo por celda de cuadrícula
-      factorArea = 1;
-      unidad = "ud";
-    } else {
-      maxRecomendado = 300;
-      factorArea = 200; // litros
-      unidad = "renac./L";
-    }
-  } else if (grupo === "metamorfoseadas") {
-    maxRecomendado = 500;
-    factorArea = 2; // metros cuadrados
-    unidad = "ranitas/m²";
-  }
-
-  const total = parseInt(count, 10) || 0;
-  const valorDensidad = esGrid ? total : (total / factorArea).toFixed(1);
-  const maxDensidad = esGrid
-    ? maxRecomendado
-    : (maxRecomendado / factorArea).toFixed(1);
-  const porcentaje = Math.min(Math.round((total / maxRecomendado) * 100), 200);
-
-  let estado = "normal";
-  if (porcentaje > 100) {
-    estado = "peligro";
-  } else if (porcentaje > 80) {
-    estado = "advertencia";
-  }
-
-  return {
-    actual: valorDensidad,
-    maxima: maxDensidad,
-    unidad,
-    porcentaje,
-    estado,
-  };
-};
 
 function App() {
   // Pestaña activa del gestor
@@ -1069,6 +883,14 @@ function App() {
 
   // Bajas cargadas desde la tabla normalizada `bajas` en Supabase
   const [bajasCloud, setBajasCloud] = useState([]);
+
+  // Pizarra de comunicación entre responsables
+  const [notasPizarra, setNotasPizarra] = useState(() => {
+    const saved = localStorage.getItem("grenoucerie_notas_pizarra");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showFormNota, setShowFormNota] = useState(false);
+  const [formNota, setFormNota] = useState({ texto: "", area: "General", prioridad: "normal", autor: "" });
 
   const [inventario, setInventario] = useState(() => {
     const saved = localStorage.getItem("grenoucerie_inventario");
@@ -2175,7 +1997,13 @@ function App() {
                         {t.type && <span style={{ fontSize: "0.7rem", background: "#e8f5e9", color: "#2e7d32", borderRadius: "8px", padding: "0 5px" }}>{t.type}</span>}
                       </div>
                       {tienePlan && <div style={{ fontSize: "0.72rem", color: "#555", marginTop: "1px" }}>💊 {planResumen}</div>}
-                      {esAlarma && <div style={{ fontSize: "0.72rem", color: "#e74c3c", fontWeight: "bold" }}>⚠️ 2ª dosis pendiente</div>}
+                      {esAlarma && (() => {
+                        const info = alarmas2aDosis.find(a => a.tanqueId === t.id);
+                        if (!info) return <div style={{ fontSize: "0.72rem", color: "#e74c3c", fontWeight: "bold" }}>⚠️ 2ª dosis pendiente</div>;
+                        return <div style={{ fontSize: "0.72rem", color: info.vencida ? "#c0392b" : "#e67e22", fontWeight: "bold" }}>
+                          {info.vencida ? `🔴 2ª dosis VENCIDA (hace ${Math.abs(info.diasParaVencer)}d) — ${info.producto}` : `⚠️ 2ª dosis en ${info.diasParaVencer}d — ${info.producto}`}
+                        </div>;
+                      })()}
                     </div>
                   </label>
                 );
@@ -3270,7 +3098,9 @@ function App() {
         headers: obtenerCabeceras(),
         body: JSON.stringify({
           lote_id: loteId,
+          tanque_id: tanqueId,
           fecha: new Date().toISOString().split("T")[0],
+          hora: new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
           cantidad,
           categoria: categoria || "Mortalidad",
           tipo_salida: tipoSalida || null,
@@ -3367,12 +3197,24 @@ function App() {
       let bajasNube = [];
       try {
         const resBajas = await fetch(
-          `${config.url}/rest/v1/bajas?select=fecha,cantidad,causa,sexo,lote_id&order=fecha.desc`,
+          `${config.url}/rest/v1/bajas?select=fecha,hora,tanque_id,cantidad,causa,sexo,lote_id&order=fecha.desc`,
           { headers: { apikey: config.key, Authorization: `Bearer ${config.key}` } },
         );
         if (resBajas.ok) bajasNube = await resBajas.json();
       } catch (err) {
         console.log("Error al cargar bajas. Probablemente la tabla no exista aún.", err);
+      }
+
+      // 3d. Cargar notas de pizarra
+      let notasNube = [];
+      try {
+        const resNotas = await fetch(
+          `${config.url}/rest/v1/notas_pizarra?select=*&order=created_at.desc`,
+          { headers: { apikey: config.key, Authorization: `Bearer ${config.key}` } },
+        );
+        if (resNotas.ok) notasNube = await resNotas.json();
+      } catch (err) {
+        console.log("Error al cargar notas pizarra. Probablemente la tabla no exista aún.", err);
       }
 
       // 4. Cargar inventario (Con try/catch separado por si la tabla aún no existe)
@@ -3536,7 +3378,18 @@ function App() {
         const soloLocales = prev.filter(i => !nubeIds.has(String(i.id)));
         return [...incidenciasNube, ...soloLocales];
       });
-      if (bajasNube.length > 0) setBajasCloud(bajasNube);
+      setBajasCloud(prev => {
+        if (bajasNube.length === 0) return prev;
+        const nubeKeys = new Set(bajasNube.map(b => `${b.fecha}_${b.cantidad}_${b.lote_id || ''}_${b.sexo || ''}`));
+        const soloLocales = prev.filter(b => !nubeKeys.has(`${b.fecha}_${b.cantidad}_${b.lote_id || ''}_${b.sexo || ''}`));
+        return [...bajasNube, ...soloLocales];
+      });
+      setNotasPizarra(prev => {
+        if (notasNube.length === 0) return prev;
+        const nubeIds = new Set(notasNube.map(n => String(n.id)));
+        const soloLocales = prev.filter(n => !nubeIds.has(String(n.id)));
+        return [...notasNube, ...soloLocales];
+      });
       setIsCloudConnected(true);
       cargarPlanesDesdeNube();
     } catch (err) {
@@ -3690,6 +3543,10 @@ function App() {
   }, [incidencias]);
 
   useEffect(() => {
+    localStorage.setItem("grenoucerie_notas_pizarra", JSON.stringify(notasPizarra));
+  }, [notasPizarra]);
+
+  useEffect(() => {
     localStorage.setItem("grenoucerie_inventario", JSON.stringify(inventario));
   }, [inventario]);
 
@@ -3766,7 +3623,8 @@ function App() {
 
     // Mantener bajasCloud sincronizado localmente
     const hoyISO = new Date().toISOString().split("T")[0];
-    setBajasCloud((prev) => [{ fecha: hoyISO, cantidad, causa: null, sexo: sexo || null, lote_id: itemAfectado.lote_id || null }, ...prev]);
+    const horaISO = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+    setBajasCloud((prev) => [{ fecha: hoyISO, hora: horaISO, tanque_id: id, cantidad, causa: null, sexo: sexo || null, lote_id: itemAfectado.lote_id || null }, ...prev]);
 
     // Guardar en la nube si está conectado
     if (isCloudConnected) {
@@ -4056,6 +3914,71 @@ function App() {
         });
       } catch (err) {
         console.error("Error al borrar incidencia en la nube:", err);
+      }
+    }
+  };
+
+  // ── PIZARRA DE COMUNICACIÓN ──────────────────────────────────
+  const guardarNotaPizarra = async () => {
+    if (!formNota.texto.trim()) return;
+    const nueva = {
+      id: Date.now(),
+      texto: formNota.texto.trim(),
+      area: formNota.area,
+      prioridad: formNota.prioridad,
+      autor: formNota.autor.trim() || "Anónimo",
+      pinned: false,
+      created_at: new Date().toISOString(),
+    };
+    setNotasPizarra(prev => [nueva, ...prev]);
+    setFormNota({ texto: "", area: "General", prioridad: "normal", autor: formNota.autor });
+    setShowFormNota(false);
+
+    if (isCloudConnected) {
+      try {
+        const res = await fetch(`${cloudConfig.url}/rest/v1/notas_pizarra`, {
+          method: "POST",
+          headers: { ...obtenerCabeceras(), Prefer: "resolution=merge-duplicates" },
+          body: JSON.stringify(nueva),
+        });
+        if (!res.ok) {
+          const errBody = await res.text().catch(() => "");
+          if (errBody.includes("notas_pizarra")) {
+            setCloudSaveError("Tabla notas_pizarra no existe. Créala en Supabase con el SQL proporcionado.");
+          }
+        }
+      } catch (err) {
+        console.error("Error al guardar nota en la nube:", err);
+      }
+    }
+  };
+
+  const togglePinNota = async (id) => {
+    setNotasPizarra(prev => prev.map(n => n.id === id ? { ...n, pinned: !n.pinned } : n));
+    if (isCloudConnected) {
+      const nota = notasPizarra.find(n => n.id === id);
+      try {
+        await fetch(`${cloudConfig.url}/rest/v1/notas_pizarra?id=eq.${id}`, {
+          method: "PATCH",
+          headers: obtenerCabeceras(),
+          body: JSON.stringify({ pinned: !nota?.pinned }),
+        });
+      } catch (err) {
+        console.error("Error al fijar nota:", err);
+      }
+    }
+  };
+
+  const borrarNotaPizarra = async (id) => {
+    setNotasPizarra(prev => prev.filter(n => n.id !== id));
+    if (isCloudConnected) {
+      try {
+        await fetch(`${cloudConfig.url}/rest/v1/notas_pizarra?id=eq.${id}`, {
+          method: "DELETE",
+          headers: obtenerCabeceras(),
+        });
+      } catch (err) {
+        console.error("Error al borrar nota:", err);
       }
     }
   };
@@ -4368,7 +4291,7 @@ function App() {
   const obtenerBajasPorFecha = (fechaNorm) => {
     if (bajasCloud.length > 0) {
       return bajasCloud
-        .filter((b) => b.fecha === fechaNorm)
+        .filter((b) => normalizarFecha(b.fecha) === fechaNorm)
         .reduce((sum, b) => sum + (parseInt(b.cantidad, 10) || 0), 0);
     }
     return tratamientos
@@ -5964,48 +5887,88 @@ function App() {
     );
   };
 
-  // Logica de Alarma de Desparasitacion
   const obtenerAlarmasTratamientos = () => {
     const alarmas = [];
     const hoy = new Date();
-    
-    // Buscar tratamientos de desparasitacion externa (primera dosis)
-    const desparasitaciones = tratamientos.filter(t => 
-      t.tipo && t.tipo.toLowerCase().includes("desparasita") && t.tipo.toLowerCase().includes("externa")
-    );
-    
-    // Agrupar por tanque y fecha
-    const tratsPorTanque = {};
-    desparasitaciones.forEach(t => {
-      if (!tratsPorTanque[t.tanque]) tratsPorTanque[t.tanque] = [];
-      tratsPorTanque[t.tanque].push(t);
+    hoy.setHours(0, 0, 0, 0);
+    const MAX_DIAS_ALARMA = 14;
+
+    const esExcluido = (t) => {
+      const tipo = (t.tipo || "").toLowerCase();
+      return tipo.includes("salida") || tipo.includes("baja") || tipo.includes("traslado") ||
+             tipo.includes("ajuste") || tipo.includes("ingreso") || tipo.includes("actualizaci");
+    };
+
+    const requiere2aDosis = (t) => {
+      if (esExcluido(t)) return false;
+      const cat = (t.categoria || "").toLowerCase();
+      if (cat.includes("desparasit")) return true;
+      if (parseInt(t.numDosis, 10) > 1) return true;
+      const tipo = (t.tipo || "").toLowerCase();
+      return PRODUCTOS_2A_DOSIS.some(p => tipo.includes(p));
+    };
+
+    const extraerProductoBase = (tipo) => {
+      const t = (tipo || "").toUpperCase();
+      if (t.includes("LEVAMISOL")) return "LEVAMISOL";
+      if (t.includes("GANADEXIL")) return "GANADEXIL";
+      if (t.includes("VETERELIN")) return "VETERELIN";
+      if (t.includes("SAL")) return "SAL";
+      return t.trim();
+    };
+
+    const candidatos = tratamientos.filter(t => t.tipo && requiere2aDosis(t));
+
+    const porTanqueProducto = {};
+    candidatos.forEach(t => {
+      const producto = extraerProductoBase(t.tipo);
+      const key = `${t.tanque}||${producto}`;
+      if (!porTanqueProducto[key]) porTanqueProducto[key] = [];
+      porTanqueProducto[key].push(t);
     });
 
-    Object.keys(tratsPorTanque).forEach(tanqueId => {
-      // Ordenar por fecha descendente
-      const trats = tratsPorTanque[tanqueId].sort((a, b) => {
-        const [dA, mA, yA] = a.fecha.split('/');
-        const [dB, mB, yB] = b.fecha.split('/');
-        return new Date(yB, mB - 1, dB) - new Date(yA, mA - 1, dA);
-      });
+    const tanquesConAlarma = new Set();
 
-      if (trats.length > 0) {
-        const ultimoTrat = trats[0];
-        const [d, m, y] = ultimoTrat.fecha.split('/');
-        const fechaUltimo = new Date(y, m - 1, d);
-        const diasPasados = Math.floor((hoy - fechaUltimo) / (1000 * 60 * 60 * 24));
-        
-        // Si hace entre 6 y 8 dias que se dio una desparasitacion
-        if (diasPasados >= 6 && diasPasados <= 8) {
-          alarmas.push(tanqueId);
-        }
+    Object.entries(porTanqueProducto).forEach(([key, trats]) => {
+      const tanqueId = key.split("||")[0];
+      if (tanquesConAlarma.has(tanqueId)) return;
+
+      const sorted = trats
+        .map(t => ({ ...t, _fecha: parseFechaTrat(t.fecha) }))
+        .filter(t => t._fecha)
+        .sort((a, b) => b._fecha - a._fecha);
+
+      if (sorted.length === 0) return;
+
+      if (sorted.length >= 2) {
+        const diasEntre = Math.floor((sorted[0]._fecha - sorted[1]._fecha) / (1000 * 60 * 60 * 24));
+        if (diasEntre >= 3 && diasEntre <= 12) return;
       }
+
+      const primera = sorted[sorted.length - 1];
+      const diasPasados = Math.floor((hoy - primera._fecha) / (1000 * 60 * 60 * 24));
+
+      if (diasPasados > MAX_DIAS_ALARMA) return;
+      if (diasPasados < 5) return;
+      if (sorted.length >= 2) return;
+
+      const diasParaVencer = INTERVALO_2A_DOSIS - diasPasados;
+      tanquesConAlarma.add(tanqueId);
+      alarmas.push({
+        tanqueId,
+        producto: extraerProductoBase(primera.tipo),
+        fechaPrimera: primera.fecha,
+        diasPasados,
+        diasParaVencer,
+        vencida: diasParaVencer < 0,
+      });
     });
 
     return alarmas;
   };
 
-  const alarmasDesparasitacion = obtenerAlarmasTratamientos() || [];
+  const alarmas2aDosis = obtenerAlarmasTratamientos() || [];
+  const alarmasDesparasitacion = alarmas2aDosis.map(a => a.tanqueId);
 
   // --- CALCULOS PARA RESUMEN GLOBAL ---
   const getResumenGlobal = () => {
@@ -6437,7 +6400,7 @@ function App() {
             <div style={{ width: "1px", height: "44px", background: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
 
             {/* Puestas */}
-            <div style={{ textAlign: "center", flex: "1 1 90px" }}>
+            <div onClick={() => setActiveTab("incubadoras")} style={{ textAlign: "center", flex: "1 1 90px", cursor: "pointer", borderRadius: "8px", padding: "0.3rem", transition: "background 0.2s" }} onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.08)"} onMouseLeave={e => e.currentTarget.style.background="transparent"}>
               <div style={{ fontSize: "1.7rem", fontWeight: "800", lineHeight: 1, color: "#f1c40f" }}>{resumen.puestasSemana}</div>
               <div style={{ fontSize: "0.65rem", opacity: 0.65, textTransform: "uppercase", marginTop: "2px" }}>🥚 puestas / 7d</div>
               {resumen.puestasHoy > 0 && <div style={{ fontSize: "0.6rem", color: "#f1c40f", marginTop: "2px" }}>+{resumen.puestasHoy} hoy</div>}
@@ -6446,7 +6409,7 @@ function App() {
             <div style={{ width: "1px", height: "44px", background: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
 
             {/* Bajas */}
-            <div style={{ textAlign: "center", flex: "1 1 90px" }}>
+            <div onClick={() => setActiveTab("historial")} style={{ textAlign: "center", flex: "1 1 90px", cursor: "pointer", borderRadius: "8px", padding: "0.3rem", transition: "background 0.2s" }} onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.08)"} onMouseLeave={e => e.currentTarget.style.background="transparent"}>
               <div style={{ fontSize: "1.7rem", fontWeight: "800", lineHeight: 1, color: bajasHoy > 0 ? "#e74c3c" : "#aaa" }}>{bajasHoy}</div>
               <div style={{ fontSize: "0.65rem", opacity: 0.65, textTransform: "uppercase", marginTop: "2px" }}>💀 bajas hoy</div>
               {bajasHoy > 0 && <div style={{ fontSize: "0.6rem", color: "#e74c3c", marginTop: "2px" }}>{pctBajasHoy}% censo · ayer {bajasAyer}</div>}
@@ -6455,23 +6418,171 @@ function App() {
             <div style={{ width: "1px", height: "44px", background: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
 
             {/* Tratamientos */}
-            <div style={{ textAlign: "center", flex: "1 1 90px" }}>
+            <div onClick={() => setActiveTab("tratamientos")} style={{ textAlign: "center", flex: "1 1 90px", cursor: "pointer", borderRadius: "8px", padding: "0.3rem", transition: "background 0.2s" }} onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.08)"} onMouseLeave={e => e.currentTarget.style.background="transparent"}>
               <div style={{ fontSize: "1.7rem", fontWeight: "800", lineHeight: 1, color: "#3498db" }}>{resumen.tratamientosSemana}</div>
               <div style={{ fontSize: "0.65rem", opacity: 0.65, textTransform: "uppercase", marginTop: "2px" }}>💊 trat. / 7d</div>
               {resumen.tratamientosHoy > 0 && <div style={{ fontSize: "0.6rem", color: "#3498db", marginTop: "2px" }}>+{resumen.tratamientosHoy} hoy</div>}
             </div>
           </div>
 
+          {/* ── 1b. PIZARRA DE COMUNICACIÓN ──────────────────────── */}
+          <div style={{
+            background: "#fff",
+            borderRadius: "14px",
+            padding: "1rem 1.2rem",
+            marginBottom: "1rem",
+            borderLeft: "6px solid var(--oliva)",
+            boxShadow: "var(--sombra)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
+              <h3 style={{ margin: 0, fontSize: "1rem", color: "var(--oliva)" }}>📋 Pizarra de Comunicación</h3>
+              <button
+                className="btn-puesta"
+                onClick={() => setShowFormNota(!showFormNota)}
+                style={{ padding: "0.3rem 0.8rem", fontSize: "0.8rem" }}
+              >
+                {showFormNota ? "✕ Cerrar" : "+ Nueva Nota"}
+              </button>
+            </div>
+
+            {showFormNota && (
+              <div style={{
+                background: "#f8f9fa",
+                borderRadius: "10px",
+                padding: "0.8rem",
+                marginBottom: "0.8rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.5rem",
+              }}>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <input
+                    type="text"
+                    placeholder="Tu nombre"
+                    value={formNota.autor}
+                    onChange={(e) => setFormNota({ ...formNota, autor: e.target.value })}
+                    style={{ padding: "0.4rem", borderRadius: "6px", border: "1px solid #ccc", flex: "1 1 120px", fontSize: "0.85rem" }}
+                  />
+                  <select
+                    value={formNota.area}
+                    onChange={(e) => setFormNota({ ...formNota, area: e.target.value })}
+                    style={{ padding: "0.4rem", borderRadius: "6px", border: "1px solid #ccc", fontSize: "0.85rem" }}
+                  >
+                    {AREAS_PIZARRA.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                  <select
+                    value={formNota.prioridad}
+                    onChange={(e) => setFormNota({ ...formNota, prioridad: e.target.value })}
+                    style={{ padding: "0.4rem", borderRadius: "6px", border: "1px solid #ccc", fontSize: "0.85rem" }}
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="importante">Importante</option>
+                    <option value="urgente">Urgente</option>
+                  </select>
+                </div>
+                <textarea
+                  placeholder="Escribe tu mensaje para el equipo..."
+                  value={formNota.texto}
+                  onChange={(e) => setFormNota({ ...formNota, texto: e.target.value })}
+                  rows={2}
+                  style={{ padding: "0.4rem", borderRadius: "6px", border: "1px solid #ccc", fontSize: "0.85rem", resize: "vertical" }}
+                />
+                <button
+                  className="btn-guardar"
+                  onClick={guardarNotaPizarra}
+                  style={{ alignSelf: "flex-end", padding: "0.4rem 1.2rem", fontSize: "0.85rem" }}
+                >
+                  Publicar
+                </button>
+              </div>
+            )}
+
+            {notasPizarra.length === 0 ? (
+              <p style={{ textAlign: "center", color: "#999", fontSize: "0.85rem", margin: "0.5rem 0" }}>
+                Sin notas. Deja un mensaje para el equipo.
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", maxHeight: "280px", overflowY: "auto" }}>
+                {[...notasPizarra]
+                  .sort((a, b) => {
+                    if (a.pinned && !b.pinned) return -1;
+                    if (!a.pinned && b.pinned) return 1;
+                    const prioOrder = { urgente: 0, importante: 1, normal: 2 };
+                    const pa = prioOrder[a.prioridad] ?? 2;
+                    const pb = prioOrder[b.prioridad] ?? 2;
+                    if (pa !== pb) return pa - pb;
+                    return new Date(b.created_at) - new Date(a.created_at);
+                  })
+                  .map(nota => {
+                    const bgColor = nota.prioridad === "urgente" ? "#fdecea" : nota.prioridad === "importante" ? "#fef9e7" : "#f8f9fa";
+                    const borderColor = nota.prioridad === "urgente" ? "#e74c3c" : nota.prioridad === "importante" ? "#f39c12" : "#ddd";
+                    const prioIcon = nota.prioridad === "urgente" ? "🔴" : nota.prioridad === "importante" ? "🟡" : "";
+                    const fechaNota = nota.created_at ? new Date(nota.created_at).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+                    return (
+                      <div key={nota.id} style={{
+                        background: bgColor,
+                        border: `1px solid ${borderColor}`,
+                        borderRadius: "8px",
+                        padding: "0.5rem 0.7rem",
+                        display: "flex",
+                        gap: "0.5rem",
+                        alignItems: "flex-start",
+                        position: "relative",
+                      }}>
+                        {nota.pinned && <span style={{ position: "absolute", top: "-6px", right: "6px", fontSize: "0.7rem" }}>📌</span>}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.2rem" }}>
+                            {prioIcon && <span style={{ fontSize: "0.65rem" }}>{prioIcon}</span>}
+                            <span style={{
+                              background: "var(--oliva)",
+                              color: "white",
+                              borderRadius: "4px",
+                              padding: "1px 6px",
+                              fontSize: "0.65rem",
+                              fontWeight: "600",
+                            }}>{nota.area}</span>
+                            <span style={{ fontSize: "0.7rem", color: "#888" }}>{nota.autor} · {fechaNota}</span>
+                          </div>
+                          <p style={{ margin: 0, fontSize: "0.85rem", color: "#333", whiteSpace: "pre-wrap" }}>{nota.texto}</p>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "2px", flexShrink: 0 }}>
+                          <button
+                            onClick={() => togglePinNota(nota.id)}
+                            title={nota.pinned ? "Desfijar" : "Fijar"}
+                            style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.75rem", padding: "2px" }}
+                          >{nota.pinned ? "📌" : "📍"}</button>
+                          <button
+                            onClick={() => { if (window.confirm("¿Borrar esta nota?")) borrarNotaPizarra(nota.id); }}
+                            title="Borrar"
+                            style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.75rem", padding: "2px" }}
+                          >🗑️</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+
           {/* ── 2. FRANJA DE ALERTAS (sólo visible si hay algo) ─────── */}
           {(() => {
             const alertas = [];
 
-            // Alarma 2ª dosis desparasitación
-            if (alarmasDesparasitacion.length > 0) {
+            // Alarma 2ª dosis
+            const vencidas2a = alarmas2aDosis.filter(a => a.vencida);
+            const proximas2a = alarmas2aDosis.filter(a => !a.vencida);
+            if (vencidas2a.length > 0) {
               alertas.push({
                 nivel: "critico",
+                icono: "🔴",
+                texto: `2ª dosis VENCIDA: ${vencidas2a.map(a => `${a.tanqueId} (${a.producto}, hace ${Math.abs(a.diasParaVencer)}d)`).join(", ")}`,
+              });
+            }
+            if (proximas2a.length > 0) {
+              alertas.push({
+                nivel: "advertencia",
                 icono: "💉",
-                texto: `2ª dosis requerida: ${alarmasDesparasitacion.join(", ")}`,
+                texto: `2ª dosis próxima: ${proximas2a.map(a => `${a.tanqueId} (${a.producto}, en ${a.diasParaVencer}d)`).join(", ")}`,
               });
             }
 
@@ -6968,19 +7079,38 @@ function App() {
               💀 Histórico de Movimientos (Bajas, Traslados y Salidas)
             </h2>
             <TableHistory
-              items={tratamientos.filter((t) => {
-                const tipo = (t.tipo || "").toLowerCase();
-                return (
-                  tipo.includes("baja") || 
-                  tipo.includes("traslado") || 
-                  tipo.includes("salida") || 
-                  tipo.includes("ajuste") ||
-                  tipo.includes("ingreso") ||
-                  tipo.includes("actualizaci")
-                );
-              })}
+              items={(() => {
+                const movLegacy = tratamientos.filter((t) => {
+                  const tipo = (t.tipo || "").toLowerCase();
+                  return (
+                    tipo.includes("traslado") ||
+                    tipo.includes("salida") ||
+                    tipo.includes("ajuste") ||
+                    tipo.includes("ingreso") ||
+                    tipo.includes("actualizaci")
+                  );
+                });
+                const bajasItems = bajasCloud.length > 0
+                  ? bajasCloud.map((b, i) => ({
+                      id: `baja-cloud-${i}`,
+                      fecha: normalizarFecha(b.fecha),
+                      hora: b.hora || "",
+                      tanque: b.tanque_id || (b.sexo ? `${b.sexo}` : "—"),
+                      tipo: `Baja${b.sexo ? " (" + b.sexo + ")" : ""}${b.causa ? " — " + b.causa : ""}`,
+                      dosis: String(b.cantidad || 0),
+                    }))
+                  : tratamientos.filter((t) => (t.tipo || "").toLowerCase().includes("baja"));
+                const toSortable = (f) => {
+                  if (!f) return "";
+                  const m = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                  return m ? `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}` : f;
+                };
+                return [...bajasItems, ...movLegacy].sort((a, b) => toSortable(b.fecha).localeCompare(toSortable(a.fecha)));
+              })()}
               onBorrar={(id) =>
-                borrarItem(tratamientos, setTratamientos, id, "tratamiento")
+                typeof id === "string" && id.startsWith("baja-cloud-")
+                  ? null
+                  : borrarItem(tratamientos, setTratamientos, id, "tratamiento")
               }
               isPuesta={false}
             />
@@ -9746,413 +9876,6 @@ function App() {
           Grenoucerie S.L. &copy; 2026 - Sistema de Gestión de Granja Avanzado
         </p>
       </footer>
-    </div>
-  );
-}
-
-function Section({ title, items, grupo, onBaja, onPuesta, onTrat, onUpdate }) {
-  if (!items || items.length === 0) return null;
-  return (
-    <div
-      className="group-section"
-      style={{ animation: "fadeIn 0.25s ease-out" }}
-    >
-      <h2 className="group-title">{title}</h2>
-      <div className="structure-grid">
-        {items.map((item) => (
-          <div key={item.id} className="structure-card extended">
-            <div className="card-top">
-              <span className="id-badge">{item.id}</span>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}
-              >
-                <input
-                  type="number"
-                  value={item.count}
-                  onChange={(e) =>
-                    onUpdate(
-                      item.id,
-                      "count",
-                      e.target.value === ""
-                        ? ""
-                        : parseInt(e.target.value, 10) || 0,
-                    )
-                  }
-                  style={{
-                    width: "65px",
-                    fontWeight: "bold",
-                    fontSize: "1rem",
-                    textAlign: "center",
-                    border: "1px solid #ccc",
-                    borderRadius: "4px",
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: "0.9rem",
-                    color: "#666",
-                    fontWeight: "bold",
-                  }}
-                >
-                  ud.
-                </span>
-              </div>
-              <div className="btn-group">
-                {onPuesta && (
-                  <button
-                    className="btn-puesta"
-                    onClick={() => onPuesta(item.id)}
-                    title="Registrar puesta de huevos"
-                  >
-                    + Puesta
-                  </button>
-                )}
-                <button
-                  className="btn-trat"
-                  onClick={() => onTrat(item.id, item.type, item.dose)}
-                  title="Aplicar un tratamiento"
-                >
-                  Tratar
-                </button>
-                <button
-                  className="btn-baja"
-                  onClick={() => onBaja(item.id)}
-                  title="Registrar baja de un individuo"
-                >
-                  Baja
-                </button>
-              </div>
-            </div>
-
-            {/* Ficha técnica y cálculo de densidad */}
-            {(() => {
-              const dens = OBTENER_DATOS_DENSIDAD(grupo, item.id, item.count);
-              return (
-                <div
-                  style={{
-                    padding: "0.2rem 0.5rem",
-                    background: "#fcfdfc",
-                    borderRadius: "8px",
-                    border: "1px solid #f0f0f0",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: "4px",
-                      fontSize: "0.8rem",
-                      color: "#555",
-                    }}
-                  >
-                    <span>
-                      Densidad: <strong>{dens.actual}</strong> / {dens.maxima}{" "}
-                      <span style={{ fontSize: "0.7rem", color: "#888" }}>
-                        {dens.unidad}
-                      </span>
-                    </span>
-                    <span
-                      className={`density-badge ${dens.estado}`}
-                      style={{ fontSize: "0.7rem" }}
-                    >
-                      {dens.porcentaje}% cap.
-                    </span>
-                  </div>
-                  <div className="progress-bg" style={{ height: "6px" }}>
-                    <div
-                      className={`progress-bar ${dens.estado}`}
-                      style={{ width: `${Math.min(dens.porcentaje, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div className="card-fields three-cols">
-              <div className="input-group">
-                <label>Último Trat.</label>
-                <input
-                  type="date"
-                  value={item.lastDate || ""}
-                  onChange={(e) =>
-                    onUpdate(item.id, "lastDate", e.target.value)
-                  }
-                />
-              </div>
-              <div className="input-group">
-                <label>Tratamiento / Alimento</label>
-                {grupo === "renacuajos" || grupo === "metamorfoseadas" ? (
-                  <input
-                    type="text"
-                    value={item.type || ""}
-                    onChange={(e) => onUpdate(item.id, "type", e.target.value)}
-                    placeholder="Alimento/Sal..."
-                    style={{
-                      padding: "4px 8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ccc",
-                      fontSize: "0.85rem",
-                    }}
-                  />
-                ) : (
-                  <select
-                    value={item.type || ""}
-                    onChange={(e) => onUpdate(item.id, "type", e.target.value)}
-                    style={{
-                      padding: "4px 8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ccc",
-                      fontSize: "0.85rem",
-                      fontFamily: "inherit",
-                      height: "28px",
-                    }}
-                  >
-                    <option value="">Ninguno</option>
-                    <option value="Sal">Sal</option>
-                    <option value="Antibiótico/Ganadexil">
-                      Antibiótico/Ganadexil
-                    </option>
-                    <option value="Levamisol">Levamisol</option>
-                  </select>
-                )}
-              </div>
-              <div className="input-group">
-                <label>Dosis / Fase</label>
-                <input
-                  type="text"
-                  value={item.dose || ""}
-                  onChange={(e) => onUpdate(item.id, "dose", e.target.value)}
-                  placeholder="ej: 0.0125 / 5g"
-                />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TableHistory({ items, onBorrar, isPuesta, isDashboard = false }) {
-  const [filtro, setFiltro] = useState("");
-  const [expandido, setExpandido] = useState(false);
-
-  if (items.length === 0)
-    return (
-      <p style={{ textAlign: "center", color: "#888", padding: "1rem" }}>
-        Aún no hay registros.
-      </p>
-    );
-
-  const filtrados = items.filter(
-    (p) =>
-      (p.fecha || "").includes(filtro) ||
-      (p.tanque || "").toLowerCase().includes(filtro.toLowerCase()) ||
-      (p.tipo || "").toLowerCase().includes(filtro.toLowerCase()),
-  );
-
-  const limite = isDashboard ? 3 : expandido ? filtrados.length : 3;
-  const mostrados = filtrados.slice(0, limite);
-
-  const emojiCat = (cat = "") => {
-    const c = cat.toLowerCase();
-    if (c.includes("antibi") || c.includes("medicament")) return "💊";
-    if (c.includes("preventiv") || c.includes("vitamina") || c.includes("suplemento")) return "🛡️";
-    if (c.includes("desparasit")) return "🧴";
-    if (c.includes("hormona") || c.includes("induccion") || c.includes("inducción")) return "💉";
-    if (c.includes("mantenimiento") || c.includes("limpieza") || c.includes("desinfec")) return "🧹";
-    if (c.includes("aliment") || c === "alimento") return "🌿";
-    return "💊";
-  };
-  const chipCat = (cat = "") => {
-    const c = cat.toLowerCase();
-    if (c.includes("antibi") || c.includes("medicament")) return { bg: "#fdecea", color: "#c0392b" };
-    if (c.includes("desparasit")) return { bg: "#f0e6ff", color: "#6c3483" };
-    if (c.includes("hormona") || c.includes("induccion") || c.includes("inducción")) return { bg: "#fef9e7", color: "#d4ac0d" };
-    if (c.includes("preventiv") || c.includes("vitamina") || c.includes("suplemento")) return { bg: "#eaf3fb", color: "#1a5276" };
-    if (c.includes("mantenimiento") || c.includes("limpieza") || c.includes("desinfec")) return { bg: "#eef2f5", color: "#34495e" };
-    return { bg: "#e8f8f0", color: "#1a7a40" }; // alimento
-  };
-
-  return (
-    <div>
-      {!isDashboard && (
-        <div
-          style={{
-            marginBottom: "1rem",
-            display: "flex",
-            gap: "0.5rem",
-            alignItems: "center",
-          }}
-        >
-          <input
-            type="text"
-            placeholder="🔍 Buscar por fecha o tanque..."
-            value={filtro}
-            onChange={(e) => setFiltro(e.target.value)}
-            style={{
-              padding: "0.5rem",
-              borderRadius: "4px",
-              border: "1px solid #ccc",
-              flex: 1,
-            }}
-          />
-          <button
-            className="btn-guardar"
-            onClick={() => setExpandido(!expandido)}
-            style={{ padding: "0.5rem 1rem" }}
-          >
-            {expandido ? "Colapsar (Ver 3)" : "Ver Todos"}
-          </button>
-        </div>
-      )}
-      <table className="history-table">
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Hora</th>
-            <th>Tanque</th>
-            {isPuesta ? (
-              <th>Detalles</th>
-            ) : (
-              <>
-                <th>Categoría / Tratamiento</th>
-                <th>Dosis</th>
-                {!isDashboard && <th>Frecuencia / Pauta</th>}
-              </>
-            )}
-            <th>Acción</th>
-          </tr>
-        </thead>
-        <tbody>
-          {mostrados.map((p) => (
-            <React.Fragment key={p.id}>
-              <tr>
-                <td>{p.fecha}</td>
-                <td>{p.hora}</td>
-                <td>
-                  <span
-                    className="id-badge"
-                    style={{ padding: "0.1rem 0.5rem", fontSize: "0.8rem" }}
-                  >
-                    {p.tanque}
-                  </span>
-                </td>
-                {isPuesta ? (
-                  <td>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", alignItems: "center" }}>
-                      {p.destino && (
-                        <span style={{ fontSize: "0.78rem", color: "#555" }}>📦 {p.destino}</span>
-                      )}
-                      {p.tipo_puesta && (
-                        <span style={{ background: "#eaf0ff", color: "#2c5282", borderRadius: "4px", padding: "1px 6px", fontSize: "0.75rem" }}>{p.tipo_puesta}</span>
-                      )}
-                      {p.estado && (
-                        <span style={{
-                          background: p.estado === "Buena" ? "#eaf4ea" : p.estado === "Regular" ? "#fef9e7" : "#fdecea",
-                          color: p.estado === "Buena" ? "#27ae60" : p.estado === "Regular" ? "#e67e22" : "#c0392b",
-                          borderRadius: "4px", padding: "1px 6px", fontSize: "0.75rem"
-                        }}>● {p.estado}</span>
-                      )}
-                      {p.huevos && (
-                        <span style={{ color: "#555", fontSize: "0.78rem" }}>🥚 {p.huevos}</span>
-                      )}
-                      {!p.destino && !p.tipo_puesta && !p.estado && !p.huevos && (
-                        <span style={{ color: "#888" }}>{p.grupo || "—"}</span>
-                      )}
-                    </div>
-                  </td>
-                ) : (
-                  <>
-                    <td>
-                      {p.tipo === "Baja" ? (
-                        <span style={{ fontWeight: "bold", color: "var(--rojo-alerta)" }}>💀 Baja registrada</span>
-                      ) : (() => {
-                        let cat = p.categoria || "";
-                        let producto = p.tipo || "";
-                        // Old masivo format: "Categoría: Producto (pauta)" → split
-                        if (!cat && producto.includes(":")) {
-                          const idx = producto.indexOf(":");
-                          cat = producto.slice(0, idx).trim();
-                          producto = producto.slice(idx + 1).trim();
-                        }
-                        const chip = chipCat(cat);
-                        return (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" }}>
-                            {cat && (
-                              <span style={{ background: chip.bg, color: chip.color, borderRadius: "4px", padding: "1px 6px", fontSize: "0.75rem", fontWeight: "500", whiteSpace: "nowrap" }}>
-                                {emojiCat(cat)} {cat}
-                              </span>
-                            )}
-                            <span style={{ fontSize: "0.85rem" }}>{producto || "—"}</span>
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td>{p.dosis || "—"}</td>
-                    {!isDashboard && (
-                      <td style={{ fontSize: "0.78rem", color: "#555" }}>
-                        {p.frecuencia ? (
-                          <span>
-                            🕐 {p.frecuencia}
-                            {p.numDosis ? <strong> × {p.numDosis} dosis</strong> : ""}
-                          </span>
-                        ) : (
-                          <span style={{ color: "#bbb" }}>—</span>
-                        )}
-                      </td>
-                    )}
-                  </>
-                )}
-                <td>
-                  <button
-                    className="btn-baja-mini"
-                    onClick={() =>
-                      onBorrar(p.id, isPuesta ? "puesta" : "tratamiento")
-                    }
-                  >
-                    Borrar
-                  </button>
-                </td>
-              </tr>
-              {/* Observaciones de puesta */}
-              {!isDashboard && isPuesta && p.obs && (
-                <tr style={{ background: "#fffef0" }}>
-                  <td colSpan={5} style={{ fontSize: "0.78rem", color: "#7f6a00", paddingLeft: "2.5rem", paddingTop: "2px", paddingBottom: "6px", borderTop: "none", fontStyle: "italic" }}>
-                    💬 {p.obs}
-                  </td>
-                </tr>
-              )}
-              {/* Notas clínicas de tratamiento */}
-              {!isDashboard && !isPuesta && p.notas && (
-                <tr style={{ background: "#fffef0" }}>
-                  <td
-                    colSpan={7}
-                    style={{
-                      fontSize: "0.78rem",
-                      color: "#7f6a00",
-                      paddingLeft: "2.5rem",
-                      paddingTop: "2px",
-                      paddingBottom: "6px",
-                      borderTop: "none",
-                      fontStyle: "italic",
-                    }}
-                  >
-                    📝 {p.notas}
-                  </td>
-                </tr>
-              )}
-            </React.Fragment>
-          ))}
-          {filtrados.length === 0 && (
-            <tr>
-              <td colSpan={isPuesta ? 5 : isDashboard ? 6 : 7} style={{ textAlign: "center", color: "#888" }}>
-                No hay resultados para la búsqueda.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
     </div>
   );
 }
