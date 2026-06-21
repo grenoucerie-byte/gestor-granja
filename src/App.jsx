@@ -7,6 +7,7 @@ import { UCIGrid, ReproduccionGrid, LaboratorioGrid, InvernaderoGrid, BrumacionG
 import IncidenciasPanel from "./components/IncidenciasPanel";
 import TratamientosMasivos from "./components/TratamientosMasivos";
 import AlimentacionPanel from "./components/AlimentacionPanel";
+import DashboardMetricas from "./components/DashboardMetricas";
 import { PRODUCTOS_DEFAULT, PLANES_FASE_DEFAULT, AREAS_PIZARRA, INTERVALO_2A_DOSIS, PRODUCTOS_2A_DOSIS, OBTENER_DATOS_DENSIDAD } from "./constants";
 import { normalizarId, lockIcon, lockClass, parseSubgrupos, serializeSubgrupos, normalizarFecha, getFechaHoyNorm, getFechaAyerNorm, parseCellId, parseFechaTrat } from "./utils";
 
@@ -4721,7 +4722,13 @@ function App() {
             })()}
           </div>
 
-          {/* ── 4. ACTIVIDAD RECIENTE (2 columnas) ───────────────────── */}
+          {/* ── 4. MÉTRICAS OPERATIVAS ───────────────────────────────── */}
+          <DashboardMetricas
+            bajasCloud={bajasCloud} tratamientos={tratamientos} data={data}
+            planesFase={planesFase} registrosAlimentacion={registrosAlimentacion}
+          />
+
+          {/* ── 5. ACTIVIDAD RECIENTE (2 columnas) ───────────────────── */}
           <div className="recent-grid">
             <div className="recent-card">
               <h3>🥚 Últimas Puestas</h3>
