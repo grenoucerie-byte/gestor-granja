@@ -2199,9 +2199,34 @@ function App() {
   const censoMetamorfoseadas = calcularCensoGrupo(data.metamorfoseadas);
   const censoTotal = censoAdultos + censoRenacuajos + censoMetamorfoseadas;
 
+  const FASES_MORTALIDAD = ["iniciación", "juvenil", "engorde", "reproductora"];
+
+  const esTanqueMortalidad = (tanqueId) => {
+    const id = normalizarId(tanqueId).toLowerCase();
+    for (const grupo of Object.keys(data)) {
+      const cell = (data[grupo] || []).find(c => normalizarId(c.id).toLowerCase() === id);
+      if (cell) {
+        return FASES_MORTALIDAD.includes((cell.type || "").toLowerCase());
+      }
+    }
+    return false;
+  };
+
+  const censoMortalidad = (() => {
+    let total = 0;
+    for (const grupo of Object.keys(data)) {
+      (data[grupo] || []).forEach(cell => {
+        if (FASES_MORTALIDAD.includes((cell.type || "").toLowerCase())) {
+          total += parseInt(cell.count, 10) || 0;
+        }
+      });
+    }
+    return total;
+  })();
+
   const obtenerBajasPorFecha = (fechaNorm) => {
     return bajasCloud
-      .filter((b) => normalizarFecha(b.fecha) === fechaNorm)
+      .filter((b) => normalizarFecha(b.fecha) === fechaNorm && esTanqueMortalidad(b.tanque_id))
       .reduce((sum, b) => sum + (parseInt(b.cantidad, 10) || 0), 0);
   };
 
@@ -2212,13 +2237,13 @@ function App() {
   const bajasAyer = obtenerBajasPorFecha(ayerNorm);
 
   const pctBajasHoy =
-    censoTotal > 0 || bajasHoy > 0
-      ? ((bajasHoy / (censoTotal + bajasHoy)) * 100).toFixed(2)
+    censoMortalidad > 0 || bajasHoy > 0
+      ? ((bajasHoy / (censoMortalidad + bajasHoy)) * 100).toFixed(2)
       : "0.00";
 
   const pctBajasAyer =
-    censoTotal > 0 || bajasAyer > 0
-      ? ((bajasAyer / (censoTotal + bajasHoy + bajasAyer)) * 100).toFixed(2)
+    censoMortalidad > 0 || bajasAyer > 0
+      ? ((bajasAyer / (censoMortalidad + bajasHoy + bajasAyer)) * 100).toFixed(2)
       : "0.00";
 
   // Configuración de alertas de estado de salud general
