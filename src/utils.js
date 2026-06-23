@@ -110,3 +110,9 @@ export const parseFechaTrat = (fechaStr) => {
   if (partsISO) return new Date(partsISO[1], partsISO[2] - 1, partsISO[3]);
   return null;
 };
+
+export const esEventoNoTratamiento = (t) => {
+  const tipo = (t.tipo || "").toLowerCase();
+  return tipo.includes("salida") || tipo.includes("baja") || tipo.includes("traslado") ||
+         tipo.includes("ajuste") || tipo.includes("ingreso") || tipo.includes("actualizaci");
+};

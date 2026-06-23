@@ -9,7 +9,7 @@ import TratamientosMasivos from "./components/TratamientosMasivos";
 import AlimentacionPanel from "./components/AlimentacionPanel";
 import DashboardMetricas from "./components/DashboardMetricas";
 import { PRODUCTOS_DEFAULT, PLANES_FASE_DEFAULT, AREAS_PIZARRA, INTERVALO_2A_DOSIS, PRODUCTOS_2A_DOSIS, OBTENER_DATOS_DENSIDAD } from "./constants";
-import { normalizarId, lockIcon, lockClass, parseSubgrupos, serializeSubgrupos, normalizarFecha, getFechaHoyNorm, getFechaAyerNorm, parseCellId, parseFechaTrat } from "./utils";
+import { normalizarId, lockIcon, lockClass, parseSubgrupos, serializeSubgrupos, normalizarFecha, getFechaHoyNorm, getFechaAyerNorm, parseCellId, parseFechaTrat, esEventoNoTratamiento } from "./utils";
 import { useSupabase } from "./hooks/useSupabase";
 import { usePizarra } from "./hooks/usePizarra";
 import { useLotes } from "./hooks/useLotes";
@@ -1593,30 +1593,15 @@ function App() {
     });
     setData(newData);
 
-    // Registrar evento de baja en el historial (se guarda en tabla tratamientos con tipo = 'Baja')
-    const nuevaBajaEvent = {
-      id: Date.now(),
-      fecha: new Date().toLocaleDateString("es-ES"),
-      hora: new Date().toLocaleTimeString("es-ES", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      tanque: id,
-      tipo: "Baja",
-      dosis: String(cantidad),
-    };
-    setTratamientos((prev) => [nuevaBajaEvent, ...prev]);
-
     // Mantener bajasCloud sincronizado localmente
     const hoyISO = new Date().toISOString().split("T")[0];
     const horaISO = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
     setBajasCloud((prev) => [{ id: Date.now(), fecha: hoyISO, hora: horaISO, tanque_id: id, cantidad, causa: null, sexo: sexo || null, lote_id: itemAfectado.lote_id || null }, ...prev]);
 
-    // Guardar en la nube si está conectado
+    // Guardar en la nube (solo tabla bajas — sin dual-write a tratamientos)
     if (isCloudConnected) {
       try {
         await syncInventarioNube({ id: id, grupo: grupo, count: nuevoCount });
-        await guardarTratamientoEnNube(nuevaBajaEvent, "baja");
         await guardarBajaEnNube({
           tanqueId: id, grupo, cantidad: cantidad,
           categoria: "Mortalidad",
@@ -2070,19 +2055,10 @@ function App() {
 
     // 6. SECCIÓN: HISTORIAL DE BAJAS
     csvContenido += "SECCIÓN: HISTORIAL DE BAJAS (MORTALIDAD)\n";
-    if (bajasCloud.length > 0) {
-      csvContenido += "Fecha;Cantidad;Sexo;Causa\n";
-      bajasCloud.forEach((b) => {
-        csvContenido += `${b.fecha || ""};${b.cantidad || ""};${b.sexo || ""};${b.causa || ""}\n`;
-      });
-    } else {
-      csvContenido += "Fecha;Hora;Tanque;Cantidad de Bajas\n";
-      tratamientos
-        .filter((t) => t.tipo === "Baja")
-        .forEach((t) => {
-          csvContenido += `${t.fecha || ""};${t.hora || ""};${t.tanque || ""};${t.dosis || ""}\n`;
-        });
-    }
+    csvContenido += "Fecha;Tanque;Cantidad;Sexo;Causa\n";
+    bajasCloud.forEach((b) => {
+      csvContenido += `${b.fecha || ""};${b.tanque_id || ""};${b.cantidad || ""};${b.sexo || ""};${b.causa || ""}\n`;
+    });
 
     const blob = new Blob([csvContenido], { type: "text/csv;charset=utf-8;" });
     const enlaceDescarga = document.createElement("a");
@@ -2223,18 +2199,10 @@ function App() {
   const censoMetamorfoseadas = calcularCensoGrupo(data.metamorfoseadas);
   const censoTotal = censoAdultos + censoRenacuajos + censoMetamorfoseadas;
 
-  // Cálculo de bajas diarias — usa tabla normalizada `bajas` cuando hay datos, sino fallback a `tratamientos`
   const obtenerBajasPorFecha = (fechaNorm) => {
-    if (bajasCloud.length > 0) {
-      return bajasCloud
-        .filter((b) => normalizarFecha(b.fecha) === fechaNorm)
-        .reduce((sum, b) => sum + (parseInt(b.cantidad, 10) || 0), 0);
-    }
-    return tratamientos
-      .filter(
-        (t) => t.tipo === "Baja" && normalizarFecha(t.fecha) === fechaNorm,
-      )
-      .reduce((sum, curr) => sum + (parseInt(curr.dosis, 10) || 0), 0);
+    return bajasCloud
+      .filter((b) => normalizarFecha(b.fecha) === fechaNorm)
+      .reduce((sum, b) => sum + (parseInt(b.cantidad, 10) || 0), 0);
   };
 
   const hoyNorm = getFechaHoyNorm();
@@ -2673,29 +2641,10 @@ function App() {
     });
     setData(newData);
 
-    // Registrar evento de salida en el historial (se guarda en tabla tratamientos con tipo = 'Salida a Industria/SANDACH')
-    const nuevaSalidaEvent = {
-      id: Date.now(),
-      fecha: new Date().toLocaleDateString("es-ES"),
-      hora: new Date().toLocaleTimeString("es-ES", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      tanque: id,
-      tipo:
-        "Salida " +
-        tipoSalida +
-        " - Destino: " +
-        (destinoStr || "No especificado"),
-      dosis: String(cantidad),
-    };
-    setTratamientos((prev) => [nuevaSalidaEvent, ...prev]);
-
-    // Guardar en la nube si está conectado
+    // Guardar en la nube (solo tabla bajas — sin dual-write a tratamientos)
     if (isCloudConnected) {
       try {
         await syncInventarioNube({ id: id, grupo: grupo, count: nuevoCount });
-        await guardarTratamientoEnNube(nuevaSalidaEvent, "salida");
         await guardarBajaEnNube({
           tanqueId: id, grupo, cantidad: cantidad,
           categoria: "Salida", tipoSalida, destino: destinoStr,
@@ -2793,14 +2742,8 @@ function App() {
     hoy.setHours(0, 0, 0, 0);
     const MAX_DIAS_ALARMA = 14;
 
-    const esExcluido = (t) => {
-      const tipo = (t.tipo || "").toLowerCase();
-      return tipo.includes("salida") || tipo.includes("baja") || tipo.includes("traslado") ||
-             tipo.includes("ajuste") || tipo.includes("ingreso") || tipo.includes("actualizaci");
-    };
-
     const requiere2aDosis = (t) => {
-      if (esExcluido(t)) return false;
+      if (esEventoNoTratamiento(t)) return false;
       const cat = (t.categoria || "").toLowerCase();
       if (cat.includes("desparasit")) return true;
       if (parseInt(t.numDosis, 10) > 1) return true;
@@ -2898,27 +2841,20 @@ function App() {
       return new Date(fechaStr);
     };
 
+    bajasCloud.forEach(b => {
+      const fecha = parseFecha(b.fecha);
+      if (fecha >= hace7Dias) {
+        const val = b.cantidad || 0;
+        bajasSemana += val;
+        if (fecha >= hoyDate) bajasHoy += val;
+      }
+    });
+
     tratamientos.forEach(t => {
       const fecha = parseFecha(t.fecha);
-      if (fecha >= hace7Dias) {
-        const tipo = (t.tipo || "").toLowerCase();
-        const isHoy = fecha >= hoyDate;
-        
-        if (t.tipo === "Baja") {
-          const val = parseInt(t.dosis, 10) || 0;
-          bajasSemana += val;
-          if (isHoy) bajasHoy += val;
-        } else if (
-          !tipo.includes("traslado") && 
-          !tipo.includes("salida") && 
-          !tipo.includes("ajuste") &&
-          !tipo.includes("ingreso") &&
-          !tipo.includes("actualizaci") &&
-          t.tipo !== "Baja"
-        ) {
-          tratamientosSemana++;
-          if (isHoy) tratamientosHoy++;
-        }
+      if (fecha >= hace7Dias && !esEventoNoTratamiento(t)) {
+        tratamientosSemana++;
+        if (fecha >= hoyDate) tratamientosHoy++;
       }
     });
 
@@ -3466,15 +3402,13 @@ function App() {
             const hace48h = new Date(); hace48h.setDate(hace48h.getDate() - 2);
             const hace5d  = new Date(); hace5d.setDate(hace5d.getDate() - 5);
             const bajas48h = {}, bajas5d = {};
-            tratamientos.forEach(t => {
-              if (t.tipo === "Baja") {
-                const parts = (t.fecha || "").split("/");
-                const f = parts.length === 3 ? new Date(parts[2], parts[1] - 1, parts[0]) : new Date(t.fecha);
-                if (isNaN(f)) return;
-                const cant = parseInt(t.dosis, 10) || 0;
-                if (f >= hace48h) bajas48h[t.tanque] = (bajas48h[t.tanque] || 0) + cant;
-                if (f >= hace5d)  bajas5d[t.tanque]  = (bajas5d[t.tanque]  || 0) + cant;
-              }
+            bajasCloud.forEach(b => {
+              const f = new Date(b.fecha);
+              if (isNaN(f)) return;
+              const cant = b.cantidad || 0;
+              const tanque = b.tanque_id || "";
+              if (f >= hace48h) bajas48h[tanque] = (bajas48h[tanque] || 0) + cant;
+              if (f >= hace5d)  bajas5d[tanque]  = (bajas5d[tanque]  || 0) + cant;
             });
             const getPoblacion = (tanqueId) => {
               let vivo = 0;
@@ -3698,14 +3632,7 @@ function App() {
             <div className="recent-card">
               <h3>🩺 Últimos Tratamientos</h3>
               <TableHistory
-                items={tratamientos.filter((t) => {
-                  const tipo = (t.tipo || "").toLowerCase();
-                  return !(
-                    tipo.includes("baja") || tipo.includes("traslado") ||
-                    tipo.includes("salida") || tipo.includes("ajuste") ||
-                    tipo.includes("ingreso") || tipo.includes("actualizaci")
-                  );
-                })}
+                items={tratamientos.filter((t) => !esEventoNoTratamiento(t))}
                 onBorrar={(id) => borrarItem(tratamientos, setTratamientos, id, "tratamiento")}
                 isPuesta={false}
                 isDashboard={true}
@@ -3948,17 +3875,7 @@ function App() {
               💊 Histórico de Tratamientos Médicos
             </h2>
             <TableHistory
-              items={tratamientos.filter((t) => {
-                const tipo = (t.tipo || "").toLowerCase();
-                return !(
-                  tipo.includes("baja") || 
-                  tipo.includes("traslado") || 
-                  tipo.includes("salida") || 
-                  tipo.includes("ajuste") ||
-                  tipo.includes("ingreso") ||
-                  tipo.includes("actualizaci")
-                );
-              })}
+              items={tratamientos.filter((t) => !esEventoNoTratamiento(t))}
               onBorrar={(id) =>
                 borrarItem(tratamientos, setTratamientos, id, "tratamiento")
               }
@@ -3978,16 +3895,7 @@ function App() {
             </h2>
             <TableHistory
               items={(() => {
-                const movLegacy = tratamientos.filter((t) => {
-                  const tipo = (t.tipo || "").toLowerCase();
-                  return (
-                    tipo.includes("traslado") ||
-                    tipo.includes("salida") ||
-                    tipo.includes("ajuste") ||
-                    tipo.includes("ingreso") ||
-                    tipo.includes("actualizaci")
-                  );
-                });
+                const movLegacy = tratamientos.filter((t) => esEventoNoTratamiento(t) && t.tipo !== "Baja");
                 const bajasItems = bajasCloud.length > 0
                   ? bajasCloud.map((b) => ({
                       id: `baja-cloud-${b.id}`,
@@ -6225,12 +6133,7 @@ function App() {
               const histTrat = tratamientos
                 .filter(t => {
                   const tid = normalizarId(t.tanque || "");
-                  const tipo = (t.tipo || "").toLowerCase();
-                  // excluir bajas, salidas, ajustes de censo
-                  return tid === cellId && !(
-                    tipo.includes("baja") || tipo.includes("salida") ||
-                    tipo.includes("ajuste") || tipo.includes("ingreso") || tipo.includes("actualizaci")
-                  );
+                  return tid === cellId && !esEventoNoTratamiento(t);
                 })
                 .slice(0, 8);
               if (histTrat.length === 0) return null;
