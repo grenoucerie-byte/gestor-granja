@@ -2226,6 +2226,12 @@ function App() {
 
   const obtenerBajasPorFecha = (fechaNorm) => {
     return bajasCloud
+      .filter((b) => normalizarFecha(b.fecha) === fechaNorm)
+      .reduce((sum, b) => sum + (parseInt(b.cantidad, 10) || 0), 0);
+  };
+
+  const obtenerBajasMortalidadPorFecha = (fechaNorm) => {
+    return bajasCloud
       .filter((b) => normalizarFecha(b.fecha) === fechaNorm && esTanqueMortalidad(b.tanque_id))
       .reduce((sum, b) => sum + (parseInt(b.cantidad, 10) || 0), 0);
   };
@@ -2236,14 +2242,17 @@ function App() {
   const bajasHoy = obtenerBajasPorFecha(hoyNorm);
   const bajasAyer = obtenerBajasPorFecha(ayerNorm);
 
+  const bajasMortHoy = obtenerBajasMortalidadPorFecha(hoyNorm);
+  const bajasMortAyer = obtenerBajasMortalidadPorFecha(ayerNorm);
+
   const pctBajasHoy =
-    censoMortalidad > 0 || bajasHoy > 0
-      ? ((bajasHoy / (censoMortalidad + bajasHoy)) * 100).toFixed(2)
+    censoMortalidad > 0 || bajasMortHoy > 0
+      ? ((bajasMortHoy / (censoMortalidad + bajasMortHoy)) * 100).toFixed(2)
       : "0.00";
 
   const pctBajasAyer =
-    censoMortalidad > 0 || bajasAyer > 0
-      ? ((bajasAyer / (censoMortalidad + bajasHoy + bajasAyer)) * 100).toFixed(2)
+    censoMortalidad > 0 || bajasMortAyer > 0
+      ? ((bajasMortAyer / (censoMortalidad + bajasMortHoy + bajasMortAyer)) * 100).toFixed(2)
       : "0.00";
 
   // Configuración de alertas de estado de salud general
