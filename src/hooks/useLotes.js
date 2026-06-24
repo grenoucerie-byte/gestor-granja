@@ -20,7 +20,8 @@ export const useLotes = ({ sbFetch, ubicacionIdCacheRef }) => {
         body: JSON.stringify({ codigo, nombre: codigo }),
       });
       if (!resCrear || !resCrear.ok) {
-        console.warn(`No se pudo auto-crear ubicación "${codigo}":`, resCrear ? await resCrear.text().catch(() => "") : "");
+        const errDetail = resCrear ? await resCrear.text().catch(() => "") : "sin respuesta";
+        console.error(`No se pudo auto-crear ubicación "${codigo}" (${resCrear?.status}):`, errDetail);
         ubicacionIdCacheRef.current[codigo] = null;
         return null;
       }
