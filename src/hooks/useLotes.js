@@ -17,7 +17,7 @@ export const useLotes = ({ sbFetch, ubicacionIdCacheRef }) => {
       const resCrear = await sbFetch("ubicaciones", {
         method: "POST",
         headers: { Prefer: "return=representation" },
-        body: JSON.stringify({ codigo }),
+        body: JSON.stringify({ codigo, tipo_ubicacion: "engorde" }),
       });
       if (!resCrear || !resCrear.ok) {
         const errDetail = resCrear ? await resCrear.text().catch(() => "") : "sin respuesta";
