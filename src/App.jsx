@@ -15,6 +15,8 @@ import { usePizarra } from "./hooks/usePizarra";
 import { useLotes } from "./hooks/useLotes";
 import { useCloudSync } from "./hooks/useCloudSync";
 import { useTratamientos } from "./hooks/useTratamientos";
+import { useBajas } from "./hooks/useBajas";
+import { useIncidencias } from "./hooks/useIncidencias";
 import {
   generarCeldasIncubadoras, asegurarEstructurasIncubadoras,
   generarCeldasGrid, asegurarEstructurasRenacuajos,
@@ -342,6 +344,18 @@ function App() {
     bulkTratCategoria, bulkTratProducto, setBulkTratProducto,
     bulkTratDosis, setBulkTratDosis, bulkTratTiempo, setBulkTratTiempo,
     bulkTratFecha,
+  });
+
+  const { registrarBajasEspecial, registrarBaja, borrarBajaCloud } = useBajas({
+    isCloudConnected, cloudConfig, obtenerCabeceras, setCloudSaveError,
+    data, setData, setBajasCloud,
+    syncInventarioNube, guardarBajaEnNube,
+  });
+
+  const { abrirIncidencia, actualizarIncidencia, cerrarIncidencia, borrarIncidencia } = useIncidencias({
+    isCloudConnected, cloudConfig, obtenerCabeceras, setCloudSaveError,
+    incidencias, setIncidencias,
+    aplicarTratamiento,
   });
 
   const ejecutarTraslado = async (rawDestinoCell, destinoGrupo) => {
@@ -929,66 +943,6 @@ function App() {
 
 
 
-  // Registro de bajas especiales con historial detallado
-  const registrarBajasEspecial = async (grupo, rawId, cantidadStr, { sexo = null } = {}) => {
-    const id = normalizarId(rawId);
-    const cantidad = parseInt(cantidadStr, 10);
-    if (isNaN(cantidad) || cantidad <= 0) return;
-
-    const itemAfectado = data[grupo].find(
-      (item) => normalizarId(item.id) === id,
-    );
-    if (!itemAfectado || itemAfectado.count < cantidad) {
-      alert(
-        "No hay suficientes unidades en este tanque/celda para registrar esa cantidad de bajas.",
-      );
-      return;
-    }
-
-    const nuevoCount = itemAfectado.count - cantidad;
-
-    // Actualizar censo local
-    const newData = { ...data };
-    const extrasBaja =
-      nuevoCount <= 0
-        ? { type: "", dose: "", obs: "", muestras: "", pesoMedio: "" }
-        : {};
-    newData[grupo] = newData[grupo].map((item) => {
-      const cId = normalizarId(item.id).toLowerCase();
-      if (cId === id.toLowerCase())
-        return { ...item, id: id, count: nuevoCount, ...extrasBaja };
-      return item;
-    });
-    setData(newData);
-
-    // Mantener bajasCloud sincronizado localmente
-    const hoyISO = new Date().toISOString().split("T")[0];
-    const horaISO = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-    setBajasCloud((prev) => [{ id: Date.now(), fecha: hoyISO, hora: horaISO, tanque_id: id, cantidad, causa: null, sexo: sexo || null, lote_id: itemAfectado.lote_id || null }, ...prev]);
-
-    // Guardar en la nube (solo tabla bajas — sin dual-write a tratamientos)
-    if (isCloudConnected) {
-      try {
-        await syncInventarioNube({ id: id, grupo: grupo, count: nuevoCount });
-        await guardarBajaEnNube({
-          tanqueId: id, grupo, cantidad: cantidad,
-          categoria: "Mortalidad",
-          loteIdLocal: itemAfectado.lote_id,
-          sexo,
-        });
-      } catch (err) {
-        console.error("Error al guardar baja en la nube:", err);
-        setCloudSaveError(`Error al guardar baja: ${err.message}`);
-      }
-    }
-  };
-  // Mantener compatibilidad con botones simples de baja
-  const registrarBaja = async (grupo, id) => {
-    const cantPrompt = window.prompt("¿Cuántas bajas deseas registrar?", "1");
-    if (cantPrompt === null) return;
-    await registrarBajasEspecial(grupo, id, cantPrompt);
-  };
-
   // Abre el modal de registro de puesta (sustituye los window.prompt en cadena)
   const registrarPuesta = (id, nombreGrupo) => {
     initModalPuesta(id, nombreGrupo);
@@ -1089,141 +1043,6 @@ function App() {
       }
     }
   };
-
-  // ─── Control de Incidencias (bacteriosis y otros brotes sanitarios) ──────
-  const abrirIncidencia = async (form) => {
-    if (!form.agenteCausante || !form.agenteCausante.trim()) {
-      alert("Indica el agente causante de la incidencia.");
-      return;
-    }
-    if (!form.racewaysAfectados || !form.racewaysAfectados.trim()) {
-      alert("Indica al menos un raceway afectado.");
-      return;
-    }
-    const tieneTratamiento = form.tratProducto && form.tratProducto.trim();
-    const resumenTratamiento = tieneTratamiento
-      ? `${form.tratCategoria}: ${form.tratProducto.trim()}${form.tratDosis ? ` (${form.tratDosis})` : ""}${form.tratFrecuencia ? ` · ${form.tratFrecuencia}` : ""}`
-      : "";
-
-    const nuevaIncidencia = {
-      id: Date.now(),
-      fecha_inicio: form.fechaInicio || new Date().toLocaleDateString("es-ES"),
-      agente_causante: form.agenteCausante.trim(),
-      raceways_afectados: form.racewaysAfectados.trim(),
-      tratamiento_aplicado: resumenTratamiento,
-      severidad: form.severidad || "Media",
-      estado: "Abierta",
-      notas: form.notas || "",
-      fecha_cierre: "",
-    };
-    setIncidencias((prev) => [nuevaIncidencia, ...prev]);
-
-    if (isCloudConnected) {
-      try {
-        const res = await fetch(`${cloudConfig.url}/rest/v1/incidencias`, {
-          method: "POST",
-          headers: { ...obtenerCabeceras(), Prefer: "resolution=merge-duplicates" },
-          body: JSON.stringify(nuevaIncidencia),
-        });
-        if (!res.ok) {
-          const errBody = await res.json().catch(() => ({}));
-          const msg = errBody.message || errBody.hint || errBody.details || "Error desconocido";
-          setCloudSaveError(`Error al guardar incidencia (${res.status}): ${msg}`);
-        } else {
-          setCloudSaveError(null);
-        }
-      } catch (err) {
-        setCloudSaveError(`Error de red al guardar incidencia: ${err.message}`);
-      }
-    }
-
-    // Aplicar el tratamiento, si se indicó, a cada raceway afectado.
-    // Esto crea registros reales en `tratamientos`, visibles en el historial
-    // de cada raceway y en Historiales y Reportes — no solo en la incidencia.
-    if (tieneTratamiento) {
-      const tanques = form.racewaysAfectados
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
-      for (const tanqueId of tanques) {
-        await aplicarTratamiento(tanqueId, form.tratProducto.trim(), form.tratDosis || "-", {
-          categoria: form.tratCategoria,
-          frecuencia: form.tratFrecuencia || "",
-          notas: `Por incidencia: ${form.agenteCausante.trim()}`,
-        });
-      }
-    }
-
-    return nuevaIncidencia;
-  };
-
-  const actualizarIncidencia = async (id, cambios) => {
-    setIncidencias((prev) =>
-      prev.map((inc) => (inc.id === id ? { ...inc, ...cambios } : inc)),
-    );
-
-    if (isCloudConnected) {
-      try {
-        const res = await fetch(`${cloudConfig.url}/rest/v1/incidencias?id=eq.${id}`, {
-          method: "PATCH",
-          headers: obtenerCabeceras(),
-          body: JSON.stringify(cambios),
-        });
-        if (!res.ok) {
-          const errBody = await res.json().catch(() => ({}));
-          const msg = errBody.message || errBody.hint || errBody.details || "Error desconocido";
-          setCloudSaveError(`Error al actualizar incidencia (${res.status}): ${msg}`);
-        } else {
-          setCloudSaveError(null);
-        }
-      } catch (err) {
-        setCloudSaveError(`Error de red al actualizar incidencia: ${err.message}`);
-      }
-    }
-  };
-
-  const cerrarIncidencia = async (id, notasCierre, tratamientoFinal) => {
-    const actual = incidencias.find((inc) => inc.id === id);
-    const notasCombinadas = notasCierre
-      ? `${actual?.notas ? actual.notas + " | " : ""}Cierre: ${notasCierre}`
-      : actual?.notas || "";
-    const cambios = {
-      estado: "Cerrada",
-      fecha_cierre: new Date().toLocaleDateString("es-ES"),
-      notas: notasCombinadas,
-      ...(tratamientoFinal ? { tratamiento_aplicado: tratamientoFinal } : {}),
-    };
-    await actualizarIncidencia(id, cambios);
-  };
-
-  const borrarIncidencia = async (id) => {
-    setIncidencias((prev) => prev.filter((inc) => inc.id !== id));
-    if (isCloudConnected) {
-      try {
-        await fetch(`${cloudConfig.url}/rest/v1/incidencias?id=eq.${id}`, {
-          method: "DELETE",
-          headers: obtenerCabeceras(),
-        });
-      } catch (err) {
-        console.error("Error al borrar incidencia en la nube:", err);
-      }
-    }
-  };
-
-  const borrarBajaCloud = async (bajaId) => {
-    setBajasCloud(prev => prev.filter(b => b.id !== bajaId));
-    if (isCloudConnected) {
-      try {
-        await fetch(`${cloudConfig.url}/rest/v1/bajas?id=eq.${bajaId}`, {
-          method: "DELETE",
-          headers: obtenerCabeceras(),
-        });
-      } catch (err) {
-        console.error("Error al borrar baja en la nube:", err);
-      }
-    }
-  };
-
 
   const updateField = async (grupo, id, field, value) => {
     const itemAfectado = data[grupo].find((item) => item.id === id);
