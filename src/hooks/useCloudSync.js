@@ -367,28 +367,11 @@ export const useCloudSync = ({
       }
 
       setData(nuevaData);
-      setPuestas(prev => {
-        const nubeIds = new Set(puestasNube.map(p => String(p.id)));
-        return [...puestasNube, ...prev.filter(p => !nubeIds.has(String(p.id)))];
-      });
-      setTratamientos(prev => {
-        const nubeIds = new Set(tratNube.map(t => String(t.id)));
-        return [...tratNube, ...prev.filter(t => !nubeIds.has(String(t.id)))];
-      });
-      setIncidencias(prev => {
-        const nubeIds = new Set(incidenciasNube.map(i => String(i.id)));
-        return [...incidenciasNube, ...prev.filter(i => !nubeIds.has(String(i.id)))];
-      });
-      setBajasCloud(prev => {
-        if (bajasNube.length === 0) return prev;
-        const nubeIds = new Set(bajasNube.map(b => b.id));
-        return [...bajasNube, ...prev.filter(b => !nubeIds.has(b.id))];
-      });
-      setNotasPizarra(prev => {
-        if (notasNube.length === 0) return prev;
-        const nubeIds = new Set(notasNube.map(n => String(n.id)));
-        return [...notasNube, ...prev.filter(n => !nubeIds.has(String(n.id)))];
-      });
+      setPuestas(puestasNube);
+      setTratamientos(tratNube);
+      setIncidencias(incidenciasNube);
+      if (bajasNube.length > 0) setBajasCloud(bajasNube);
+      if (notasNube.length > 0) setNotasPizarra(notasNube);
       setIsCloudConnected(true);
       cargarPlanesDesdeNube();
     } catch (err) {
