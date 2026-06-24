@@ -43,18 +43,19 @@ export const useCloudSync = ({
     if (!isCloudConnected) return;
     const tabla = item.grupo ? "censos" : "inventario";
 
+    const v = (val) => val !== undefined && val !== null ? val : null;
     const payload = item.grupo
       ? {
           id: item.id,
           grupo: item.grupo,
           count: item.count !== undefined && item.count !== "" ? parseInt(item.count, 10) : 0,
           last_date: item.last_date || item.lastDate || null,
-          type: item.type || null,
-          dose: item.dose || null,
-          obs: item.obs || null,
-          peso_medio: item.peso_medio || item.pesoMedio || null,
-          muestras: item.muestras || null,
-          fecha_fase: item.fecha_fase || item.fechaFase || null
+          type: v(item.type),
+          dose: v(item.dose),
+          obs: v(item.obs),
+          peso_medio: v(item.peso_medio ?? item.pesoMedio),
+          muestras: v(item.muestras),
+          fecha_fase: v(item.fecha_fase ?? item.fechaFase)
         }
       : item;
 
