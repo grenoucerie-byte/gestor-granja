@@ -2557,7 +2557,8 @@ function App() {
               })()}
               onBorrar={(id) => {
                 if (typeof id === "string" && id.startsWith("baja-cloud-")) {
-                  const bajaId = parseInt(id.replace("baja-cloud-", ""), 10);
+                  const bajaIdRaw = id.replace("baja-cloud-", "");
+                  const bajaId = /^\d+$/.test(bajaIdRaw) ? Number(bajaIdRaw) : bajaIdRaw;
                   if (window.confirm("¿Borrar esta baja?")) borrarBajaCloud(bajaId);
                 } else {
                   borrarItem(tratamientos, setTratamientos, id, "tratamiento");

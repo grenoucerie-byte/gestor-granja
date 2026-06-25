@@ -63,8 +63,8 @@ export const useBajas = ({
   const borrarBajaCloud = useCallback(async (bajaId) => {
     let bajaInfo = null;
     setBajasCloud(prev => {
-      bajaInfo = prev.find(b => b.id === bajaId);
-      return prev.filter(b => b.id !== bajaId);
+      bajaInfo = prev.find(b => String(b.id) === String(bajaId));
+      return prev.filter(b => String(b.id) !== String(bajaId));
     });
 
     if (bajaInfo && bajaInfo.tanque_id && bajaInfo.cantidad) {
