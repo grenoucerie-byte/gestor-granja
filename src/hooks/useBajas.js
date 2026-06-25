@@ -7,7 +7,7 @@ export const useBajas = ({
   syncInventarioNube, guardarBajaEnNube,
 }) => {
 
-  const registrarBajasEspecial = useCallback(async (grupo, rawId, cantidadStr, { sexo = null } = {}) => {
+  const registrarBajasEspecial = useCallback(async (grupo, rawId, cantidadStr, { sexo = null, preserveFields = {} } = {}) => {
     const id = normalizarId(rawId);
     const cantidad = parseInt(cantidadStr, 10);
     if (isNaN(cantidad) || cantidad <= 0) return;
@@ -40,7 +40,7 @@ export const useBajas = ({
 
     if (isCloudConnected) {
       try {
-        await syncInventarioNube({ ...itemAfectado, id: id, grupo: grupo, count: nuevoCount });
+        await syncInventarioNube({ ...itemAfectado, ...preserveFields, id: id, grupo: grupo, count: nuevoCount });
         await guardarBajaEnNube({
           tanqueId: id, grupo, cantidad,
           categoria: "Mortalidad",

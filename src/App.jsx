@@ -1295,7 +1295,10 @@ function App() {
       return;
     }
 
-    await registrarBajasEspecial(grupo, id, cant, { sexo: modalBajaSexo || null });
+    await registrarBajasEspecial(grupo, id, cant, {
+      sexo: modalBajaSexo || null,
+      preserveFields: { type: modalType, dose: modalDose },
+    });
 
     // Descontar del subgrupo correspondiente si hay sexo seleccionado
     if (modalBajaSexo && modalSubgrupos.length > 0) {
