@@ -191,9 +191,7 @@ export const useCloudSync = ({
     setIsSyncing(true);
     try {
       const hdrs = {
-        apikey: config.key,
-        Authorization: `Bearer ${config.key}`,
-        "Content-Type": "application/json",
+        ...obtenerCabeceras(),
         Prefer: "resolution=merge-duplicates",
       };
 
@@ -263,7 +261,7 @@ export const useCloudSync = ({
     if (!config.url || !config.key) return;
     setIsSyncing(true);
     try {
-      const hdrs = { apikey: config.key, Authorization: `Bearer ${config.key}` };
+      const hdrs = obtenerCabeceras();
 
       const resCensos = await fetch(`${config.url}/rest/v1/censos?select=*`, { headers: hdrs });
       if (!resCensos.ok) throw new Error("Error al obtener censos");

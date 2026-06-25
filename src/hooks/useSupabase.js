@@ -1,11 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 
-export const useSupabase = () => {
-  const [cloudConfig, setCloudConfig] = useState(() => {
-    const saved = localStorage.getItem("grenoucerie_cloud_config");
-    return saved ? JSON.parse(saved) : { url: "", key: "" };
-  });
-
+export const useSupabase = (session, cloudConfig) => {
   const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [cloudSaveError, setCloudSaveError] = useState(null);
@@ -13,9 +8,9 @@ export const useSupabase = () => {
 
   const headers = useCallback(() => ({
     apikey: cloudConfig.key,
-    Authorization: `Bearer ${cloudConfig.key}`,
+    Authorization: `Bearer ${session?.access_token || cloudConfig.key}`,
     "Content-Type": "application/json",
-  }), [cloudConfig.key]);
+  }), [cloudConfig.key, session?.access_token]);
 
   const sbFetch = useCallback(async (path, options = {}) => {
     if (!cloudConfig.url) return null;
@@ -26,7 +21,6 @@ export const useSupabase = () => {
   }, [cloudConfig.url, headers]);
 
   return {
-    cloudConfig, setCloudConfig,
     isCloudConnected, setIsCloudConnected,
     isSyncing, setIsSyncing,
     cloudSaveError, setCloudSaveError,

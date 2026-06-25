@@ -30,18 +30,38 @@ function DashboardMetricas({ bajasCloud, tratamientos, data, planesFase, registr
   const totalBajasPeriodo = Object.values(bajasPorDia).reduce((s, v) => s + v, 0);
   const maxBajasDia = Math.max(1, ...Object.values(bajasPorDia));
 
+  const clasificarTanque = (id) => {
+    if (!id) return "Sin asignar";
+    if (id.startsWith("UCI")) return "UCI";
+    if (/^E\d/.test(id)) return "Renacuajos";
+    if (/^\d/.test(id)) return "Adultas";
+    if (/^MET/i.test(id)) return "Metamorfosis";
+    if (/^REP/i.test(id)) return "Reproducción";
+    if (/^BRU/i.test(id)) return "Brumación";
+    if (/^INV/i.test(id) || /^AV/i.test(id)) return "Invernadero";
+    if (/^NV/i.test(id)) return "Nave Verde";
+    if (/^INC/i.test(id)) return "Incubadoras";
+    return id;
+  };
+
   const getBajasPorArea = () => {
     const porArea = {};
     if (bajasCloud.length > 0) {
       bajasCloud.forEach(b => {
-        const area = b.tanque_id || "Sin asignar";
-        const grupo = area.startsWith("UCI") ? "UCI" : area.startsWith("E") ? "Renacuajos" : area.match(/^\d/) ? "Adultas" : "Otros";
+        const f = parseFechaTrat(b.fecha) || parseFechaTrat(normalizarFecha(b.fecha));
+        if (!f) return;
+        const diff = Math.floor((hoy - f) / 86400000);
+        if (diff < 0 || diff >= periodoMortalidad) return;
+        const grupo = clasificarTanque(b.tanque_id);
         porArea[grupo] = (porArea[grupo] || 0) + (parseInt(b.cantidad, 10) || 0);
       });
     } else {
       tratamientos.filter(t => (t.tipo || "").toLowerCase().includes("baja")).forEach(t => {
-        const tanque = t.tanque || "Sin asignar";
-        const grupo = tanque.startsWith("UCI") ? "UCI" : tanque.startsWith("E") ? "Renacuajos" : tanque.match(/^\d/) ? "Adultas" : "Otros";
+        const f = parseFechaTrat(t.fecha) || parseFechaTrat(normalizarFecha(t.fecha));
+        if (!f) return;
+        const diff = Math.floor((hoy - f) / 86400000);
+        if (diff < 0 || diff >= periodoMortalidad) return;
+        const grupo = clasificarTanque(t.tanque);
         porArea[grupo] = (porArea[grupo] || 0) + (parseInt(t.dosis, 10) || 0);
       });
     }
