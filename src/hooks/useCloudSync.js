@@ -44,6 +44,7 @@ export const useCloudSync = ({
     const tabla = item.grupo ? "censos" : "inventario";
 
     const v = (val) => val !== undefined && val !== null ? val : null;
+    const n = (val) => val !== undefined && val !== null && val !== "" ? val : null;
     const payload = item.grupo
       ? {
           id: item.id,
@@ -53,9 +54,9 @@ export const useCloudSync = ({
           type: v(item.type),
           dose: v(item.dose),
           obs: v(item.obs),
-          peso_medio: v(item.peso_medio ?? item.pesoMedio),
+          peso_medio: n(item.peso_medio ?? item.pesoMedio),
           muestras: v(item.muestras),
-          fecha_fase: v(item.fecha_fase ?? item.fechaFase)
+          fecha_fase: n(item.fecha_fase ?? item.fechaFase)
         }
       : item;
 
