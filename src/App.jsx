@@ -4374,7 +4374,7 @@ function App() {
                         "Recién eclosionado","Renacuajo S","Renacuajo M",
                         "2 patas","4 patas","Ranita con cola",
                         "Recién metamorf.","Iniciación","Juvenil",
-                        "Engorde","Reproductora","Vacío"
+                        "Engorde","Reproductora","Cuarentena","Observación","Vacío"
                       ].map(fase => (
                         <button key={fase} type="button"
                           onClick={() => setModalType(modalType === fase ? "" : fase)}
