@@ -61,7 +61,35 @@ export const useBajas = ({
   }, [registrarBajasEspecial]);
 
   const borrarBajaCloud = useCallback(async (bajaId) => {
-    setBajasCloud(prev => prev.filter(b => b.id !== bajaId));
+    let bajaInfo = null;
+    setBajasCloud(prev => {
+      bajaInfo = prev.find(b => b.id === bajaId);
+      return prev.filter(b => b.id !== bajaId);
+    });
+
+    if (bajaInfo && bajaInfo.tanque_id && bajaInfo.cantidad) {
+      const tanqueId = normalizarId(bajaInfo.tanque_id);
+      const cantidad = parseInt(bajaInfo.cantidad, 10) || 0;
+      if (cantidad > 0) {
+        setData(prev => {
+          const newData = { ...prev };
+          for (const grupo of Object.keys(newData)) {
+            const idx = newData[grupo].findIndex(item => normalizarId(item.id).toLowerCase() === tanqueId.toLowerCase());
+            if (idx !== -1) {
+              const item = newData[grupo][idx];
+              newData[grupo] = [...newData[grupo]];
+              newData[grupo][idx] = { ...item, count: (parseInt(item.count, 10) || 0) + cantidad };
+              if (isCloudConnected) {
+                syncInventarioNube({ ...newData[grupo][idx], grupo });
+              }
+              break;
+            }
+          }
+          return newData;
+        });
+      }
+    }
+
     if (isCloudConnected) {
       try {
         await fetch(`${cloudConfig.url}/rest/v1/bajas?id=eq.${bajaId}`, {
@@ -72,7 +100,7 @@ export const useBajas = ({
         console.error("Error al borrar baja en la nube:", err);
       }
     }
-  }, [isCloudConnected, cloudConfig.url, obtenerCabeceras, setBajasCloud]);
+  }, [isCloudConnected, cloudConfig.url, obtenerCabeceras, setBajasCloud, data, setData, syncInventarioNube]);
 
   return { registrarBajasEspecial, registrarBaja, borrarBajaCloud };
 };
