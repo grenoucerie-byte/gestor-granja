@@ -515,7 +515,7 @@ export const asegurarEstructurasNaveVerde = (naveVerdeList, corruptosAccumulator
 
 export const generarCeldasBrumacion = () => {
   const cajas = [];
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 5; i++) {
     cajas.push({
       id: `Bruma-Caja-${i}`,
       count: 0,
@@ -530,18 +530,8 @@ export const generarCeldasBrumacion = () => {
 };
 
 export const asegurarEstructurasBrumacion = (data = []) => {
-  const currentMap = {};
-  if (Array.isArray(data)) {
-    data.forEach((c) => {
-      currentMap[c.id] = c;
-    });
-  }
-
-  const defaultCeldas = generarCeldasBrumacion();
-  const list = defaultCeldas.map((dCell) => {
-    return currentMap[dCell.id] ? { ...dCell, ...currentMap[dCell.id] } : dCell;
-  });
-  return list;
+  if (!Array.isArray(data) || data.length === 0) return generarCeldasBrumacion();
+  return data;
 };
 
 export const generarCeldasInvernadero = () => [

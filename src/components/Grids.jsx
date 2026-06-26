@@ -472,72 +472,81 @@ export const InvernaderoGrid = ({ data, handleCellClick }) => {
 };
 
 // ─── Brumacion ───────────────────────────────────────────────────────
-export const BrumacionGrid = ({ data, handleCellClick, selectedCell }) => {
+export const BrumacionGrid = ({ data, handleCellClick, selectedCell, onAddContainer, onRemoveEmpty }) => {
+  const cajas = data ? data.filter(c => c.id.includes("Caja")) : [];
+  const cubos = data ? data.filter(c => c.id.includes("Cubo")) : [];
+  const otros = data ? data.filter(c => !c.id.includes("Caja") && !c.id.includes("Cubo")) : [];
+
+  const renderCell = (cell) => {
+    const isSelected = selectedCell && selectedCell.cell.id === cell.id;
+    const isCubo = cell.id.includes("Cubo");
+    const bg = isSelected ? "#ffeeba" : isCubo ? "#495057" : "#ffffff";
+    const textColor = isCubo ? "#f8f9fa" : "#004085";
+    const countColor = cell.count > 0 ? (isCubo ? "#17a2b8" : "#28a745") : (isCubo ? "#adb5bd" : "#ccc");
+    const border = cell.count > 0 ? `2px solid ${isCubo ? "#17a2b8" : "#0056b3"}` : `1px solid ${isCubo ? "#6c757d" : "#ccc"}`;
+    return (
+      <div
+        key={cell.id}
+        onClick={() => handleCellClick(cell, "brumacion")}
+        style={{
+          background: bg, border, padding: "10px", borderRadius: "8px",
+          cursor: "pointer", textAlign: "center",
+          boxShadow: isCubo ? "0 2px 4px rgba(0,0,0,0.2)" : "0 2px 4px rgba(0,0,0,0.05)",
+          minHeight: "80px",
+        }}
+      >
+        <div style={{ fontWeight: "bold", color: textColor, marginBottom: "5px" }}>{cell.id}</div>
+        <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: countColor }}>{cell.count} ud</div>
+        {cell.type && <div style={{ fontSize: "0.7rem", background: "#6f42c1", color: "#fff", borderRadius: "4px", padding: "1px 6px", display: "inline-block", marginTop: "3px" }}>{cell.type}</div>}
+        {cell.obs && <div style={{ fontSize: "0.7rem", color: isCubo ? "#ced4da" : "#666", marginTop: "4px" }}>{cell.obs}</div>}
+      </div>
+    );
+  };
+
+  const btnStyle = { background: "#e9ecef", border: "2px dashed #adb5bd", padding: "10px", borderRadius: "8px", cursor: "pointer", textAlign: "center", minHeight: "80px", display: "flex", alignItems: "center", justifyContent: "center", color: "#6c757d", fontWeight: "bold", fontSize: "0.9rem" };
+
+  const hasEmpty = data && data.some(c => !c.count || c.count <= 0);
+
   return (
-    <div style={{ padding: "1rem", maxWidth: "800px", margin: "0 auto" }}>
+    <div style={{ padding: "1rem", maxWidth: "900px", margin: "0 auto" }}>
       <div style={{ background: "#f0f8ff", border: "2px solid #b3d4ff", borderRadius: "12px", padding: "1.5rem" }}>
         <h3 style={{ textAlign: "center", color: "#0056b3", marginBottom: "1.5rem", fontSize: "1.4rem" }}>
-          ❄️ Vitrina Expositora de Brumación
+          ❄️ Sala de Brumación
         </h3>
 
-        <div style={{ background: "#e6f2ff", padding: "1rem", borderRadius: "8px", marginBottom: "1.5rem", border: "1px dashed #99c2ff" }}>
-          <h4 style={{ color: "#004085", marginBottom: "1rem", textAlign: "center" }}>Área Superior (Frio Positivo / Fotoperiodo)</h4>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "10px" }}>
-            {data && data.slice(0, 5).map((cell) => {
-              const bg = selectedCell && selectedCell.cell.id === cell.id ? "#ffeeba" : "#ffffff";
-              const border = cell.count > 0 ? "2px solid #0056b3" : "1px solid #ccc";
-              return (
-                <div
-                  key={cell.id}
-                  onClick={() => handleCellClick(cell, "brumacion")}
-                  style={{
-                    background: bg,
-                    border: border,
-                    padding: "10px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    textAlign: "center",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
-                    minHeight: "80px",
-                  }}
-                >
-                  <div style={{ fontWeight: "bold", color: "#004085", marginBottom: "5px" }}>{cell.id}</div>
-                  <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: cell.count > 0 ? "#28a745" : "#ccc" }}>{cell.count} ud</div>
-                  {cell.obs && <div style={{ fontSize: "0.7rem", color: "#666", marginTop: "4px" }}>{cell.obs}</div>}
-                </div>
-              );
-            })}
+        {cajas.length > 0 && (
+          <div style={{ background: "#e6f2ff", padding: "1rem", borderRadius: "8px", marginBottom: "1rem", border: "1px dashed #99c2ff" }}>
+            <h4 style={{ color: "#004085", marginBottom: "1rem", textAlign: "center" }}>📦 Cajas</h4>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "10px" }}>
+              {cajas.map(renderCell)}
+            </div>
           </div>
-        </div>
+        )}
 
-        <div style={{ background: "#343a40", padding: "1rem", borderRadius: "8px", border: "1px solid #1d2124" }}>
-          <h4 style={{ color: "#f8f9fa", marginBottom: "1rem", textAlign: "center" }}>Área Inferior (Oscuridad y Frío)</h4>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "10px" }}>
-            {data && data.slice(5, 10).map((cell) => {
-              const bg = selectedCell && selectedCell.cell.id === cell.id ? "#ffeeba" : "#495057";
-              const border = cell.count > 0 ? "2px solid #17a2b8" : "1px solid #6c757d";
-              return (
-                <div
-                  key={cell.id}
-                  onClick={() => handleCellClick(cell, "brumacion")}
-                  style={{
-                    background: bg,
-                    border: border,
-                    padding: "10px",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    textAlign: "center",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-                    minHeight: "80px",
-                  }}
-                >
-                  <div style={{ fontWeight: "bold", color: "#f8f9fa", marginBottom: "5px" }}>{cell.id}</div>
-                  <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: cell.count > 0 ? "#17a2b8" : "#adb5bd" }}>{cell.count} ud</div>
-                  {cell.obs && <div style={{ fontSize: "0.7rem", color: "#ced4da", marginTop: "4px" }}>{cell.obs}</div>}
-                </div>
-              );
-            })}
+        {cubos.length > 0 && (
+          <div style={{ background: "#343a40", padding: "1rem", borderRadius: "8px", marginBottom: "1rem", border: "1px solid #1d2124" }}>
+            <h4 style={{ color: "#f8f9fa", marginBottom: "1rem", textAlign: "center" }}>🧊 Cubos</h4>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "10px" }}>
+              {cubos.map(renderCell)}
+            </div>
           </div>
+        )}
+
+        {otros.length > 0 && (
+          <div style={{ background: "#fff3cd", padding: "1rem", borderRadius: "8px", marginBottom: "1rem", border: "1px dashed #ffc107" }}>
+            <h4 style={{ color: "#856404", marginBottom: "1rem", textAlign: "center" }}>Otros</h4>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "10px" }}>
+              {otros.map(renderCell)}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "1rem", flexWrap: "wrap" }}>
+          <div style={btnStyle} onClick={() => onAddContainer && onAddContainer("Caja")}>📦 + Añadir Caja</div>
+          <div style={btnStyle} onClick={() => onAddContainer && onAddContainer("Cubo")}>🧊 + Añadir Cubo</div>
+          {hasEmpty && (
+            <div style={{ ...btnStyle, background: "#fff3cd", borderColor: "#ffc107", color: "#856404" }} onClick={() => onRemoveEmpty && onRemoveEmpty()}>🗑️ Quitar vacíos</div>
+          )}
         </div>
       </div>
     </div>

@@ -1240,7 +1240,31 @@ function AppContent({ cloudConfig, setCloudConfig, session, logout }) {
 
       {activeTab === "brumacion" && (
         <div className="tab-content" style={{ animation: "fadeIn 0.3s ease" }}>
-          <BrumacionGrid data={data.brumacion} handleCellClick={handleCellClick} selectedCell={selectedCell} />
+          <BrumacionGrid data={data.brumacion} handleCellClick={handleCellClick} selectedCell={selectedCell}
+            onAddContainer={(tipo) => {
+              const prefix = `Bruma-${tipo}-`;
+              const existing = data.brumacion.filter(c => c.id.startsWith(prefix));
+              const nextNum = existing.length > 0
+                ? Math.max(...existing.map(c => parseInt(c.id.replace(prefix, ""), 10) || 0)) + 1
+                : 1;
+              const newCell = { id: `${prefix}${nextNum}`, count: 0, dose: "", type: "", obs: "", lastDate: "", pesoMedio: 0, grupo: "brumacion" };
+              setData(prev => ({ ...prev, brumacion: [...prev.brumacion, newCell] }));
+              if (isCloudConnected) syncInventarioNube({ ...newCell, grupo: "brumacion" });
+            }}
+            onRemoveEmpty={() => {
+              const vacios = data.brumacion.filter(c => !c.count || c.count <= 0);
+              if (vacios.length === 0) return;
+              if (!window.confirm(`¿Eliminar ${vacios.length} contenedor(es) vacío(s)?`)) return;
+              setData(prev => ({ ...prev, brumacion: prev.brumacion.filter(c => c.count > 0) }));
+              if (isCloudConnected) {
+                vacios.forEach(c => {
+                  fetch(`${cloudConfig.url}/rest/v1/censos?id=eq.${encodeURIComponent(c.id)}&grupo=eq.brumacion`, {
+                    method: "DELETE", headers: obtenerCabeceras(),
+                  }).catch(err => console.error("Error al borrar celda brumación:", err));
+                });
+              }
+            }}
+          />
         </div>
       )}
 
