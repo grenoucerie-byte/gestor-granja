@@ -1261,6 +1261,21 @@ function App() {
       });
       setData(newData);
 
+      // Si es incubadora, borrar las puestas asociadas
+      if (grupo === "incubadoras") {
+        const puestasABorrar = puestas.filter(p => p.destino === id);
+        if (puestasABorrar.length > 0) {
+          setPuestas(prev => prev.filter(p => p.destino !== id));
+          if (isCloudConnected) {
+            for (const p of puestasABorrar) {
+              fetch(`${cloudConfig.url}/rest/v1/puestas?id=eq.${p.id}`, {
+                method: "DELETE", headers: obtenerCabeceras(),
+              }).catch(err => console.error("Error al borrar puesta:", err));
+            }
+          }
+        }
+      }
+
       if (isCloudConnected) {
         try {
           await syncInventarioNube({
