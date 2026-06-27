@@ -6,25 +6,29 @@ export const useSupabase = (session, cloudConfig) => {
   const [cloudSaveError, setCloudSaveError] = useState(null);
   const ubicacionIdCacheRef = useRef({});
 
-  const headers = useCallback(() => ({
-    apikey: cloudConfig.key,
-    Authorization: `Bearer ${session?.access_token || cloudConfig.key}`,
-    "Content-Type": "application/json",
-  }), [cloudConfig.key, session?.access_token]);
+  const getHeaders = useCallback(() => {
+    const PUBLISHABLE_KEY = "sb_publishable_jykeA73vChjrKc4CeMI8TQ_uZuZXfYQ";
+    const token = (session && session.access_token) || PUBLISHABLE_KEY;
+    return {
+      "apikey": token,
+      "Authorization": "Bearer " + token,
+      "Content-Type": "application/json",
+    };
+  }, [session]);
 
   const sbFetch = useCallback(async (path, options = {}) => {
-    if (!cloudConfig.url) return null;
-    return fetch(`${cloudConfig.url}/rest/v1/${path}`, {
+    if (!cloudConfig || !cloudConfig.url) return null;
+    return fetch(cloudConfig.url + "/rest/v1/" + path, {
       ...options,
-      headers: { ...headers(), ...options.headers },
+      headers: { ...getHeaders(), ...options.headers },
     });
-  }, [cloudConfig.url, headers]);
+  }, [cloudConfig, getHeaders]);
 
   return {
     isCloudConnected, setIsCloudConnected,
     isSyncing, setIsSyncing,
     cloudSaveError, setCloudSaveError,
     ubicacionIdCacheRef,
-    headers, sbFetch,
+    headers: getHeaders, sbFetch,
   };
 };

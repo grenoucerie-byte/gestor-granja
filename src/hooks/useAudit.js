@@ -1,5 +1,7 @@
 import { useCallback } from "react";
 
+const PUBLISHABLE_KEY = "sb_publishable_jykeA73vChjrKc4CeMI8TQ_uZuZXfYQ";
+
 export const useAudit = (cloudConfig, session) => {
   const registrarAccion = useCallback(async ({ tabla, accion, registroId, datosAnteriores, datosNuevos }) => {
     if (!cloudConfig || !cloudConfig.url || !cloudConfig.key || !session || !session.user) return;
@@ -8,8 +10,8 @@ export const useAudit = (cloudConfig, session) => {
       await fetch(cloudConfig.url + "/rest/v1/audit_log", {
         method: "POST",
         headers: {
-          "apikey": cloudConfig.key,
-          "Authorization": "Bearer " + cloudConfig.key,
+          "apikey": PUBLISHABLE_KEY,
+          "Authorization": "Bearer " + PUBLISHABLE_KEY,
           "Content-Type": "application/json",
           "Prefer": "return=minimal",
         },

@@ -1,5 +1,7 @@
 import { useCallback } from "react";
 
+const PUBLISHABLE_KEY = "sb_publishable_jykeA73vChjrKc4CeMI8TQ_uZuZXfYQ";
+
 export const useCalendario = (cloudConfig, session) => {
   const obtenerTareas = useCallback(async () => {
     if (!cloudConfig || !cloudConfig.url || !cloudConfig.key) return [];
@@ -8,8 +10,8 @@ export const useCalendario = (cloudConfig, session) => {
       const query = cloudConfig.url + "/rest/v1/tareas_programadas?order=fecha_programada.asc&limit=200";
       const res = await fetch(query, {
         headers: {
-          "apikey": cloudConfig.key,
-          "Authorization": "Bearer " + cloudConfig.key,
+          "apikey": PUBLISHABLE_KEY,
+          "Authorization": "Bearer " + PUBLISHABLE_KEY,
         },
       });
       return await res.json();
@@ -25,8 +27,8 @@ export const useCalendario = (cloudConfig, session) => {
       const res = await fetch(cloudConfig.url + "/rest/v1/tareas_programadas", {
         method: "POST",
         headers: {
-          "apikey": cloudConfig.key,
-          "Authorization": "Bearer " + cloudConfig.key,
+          "apikey": PUBLISHABLE_KEY,
+          "Authorization": "Bearer " + PUBLISHABLE_KEY,
           "Content-Type": "application/json",
           "Prefer": "return=minimal",
         },
@@ -54,8 +56,8 @@ export const useCalendario = (cloudConfig, session) => {
       const res = await fetch(cloudConfig.url + "/rest/v1/tareas_programadas?id=eq." + id, {
         method: "PATCH",
         headers: {
-          "apikey": cloudConfig.key,
-          "Authorization": "Bearer " + cloudConfig.key,
+          "apikey": PUBLISHABLE_KEY,
+          "Authorization": "Bearer " + PUBLISHABLE_KEY,
           "Content-Type": "application/json",
           "Prefer": "return=minimal",
         },
@@ -74,8 +76,8 @@ export const useCalendario = (cloudConfig, session) => {
       const res = await fetch(cloudConfig.url + "/rest/v1/tareas_programadas?id=eq." + id, {
         method: "DELETE",
         headers: {
-          "apikey": cloudConfig.key,
-          "Authorization": "Bearer " + cloudConfig.key,
+          "apikey": PUBLISHABLE_KEY,
+          "Authorization": "Bearer " + PUBLISHABLE_KEY,
           "Prefer": "return=minimal",
         },
       });
@@ -94,7 +96,6 @@ export const useCalendario = (cloudConfig, session) => {
     for (const tanque of tanques) {
       if (!tanque.count || parseInt(tanque.count) <= 0) continue;
       
-      // Desparasitacion cada 30 dias
       const fechaDesparasitacion = new Date(hoy);
       fechaDesparasitacion.setDate(hoy.getDate() + 30);
       tareas.push({
@@ -105,7 +106,6 @@ export const useCalendario = (cloudConfig, session) => {
         notas: "Desparasitacion periodica automatica",
       });
       
-      // Censo semanal
       const fechaCenso = new Date(hoy);
       fechaCenso.setDate(hoy.getDate() + 7);
       tareas.push({
@@ -122,8 +122,8 @@ export const useCalendario = (cloudConfig, session) => {
         await fetch(cloudConfig.url + "/rest/v1/tareas_programadas", {
           method: "POST",
           headers: {
-            "apikey": cloudConfig.key,
-            "Authorization": "Bearer " + cloudConfig.key,
+            "apikey": PUBLISHABLE_KEY,
+            "Authorization": "Bearer " + PUBLISHABLE_KEY,
             "Content-Type": "application/json",
             "Prefer": "resolution=merge-duplicates",
           },

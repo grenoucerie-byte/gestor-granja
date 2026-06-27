@@ -1,5 +1,7 @@
 import { useCallback } from "react";
 
+const PUBLISHABLE_KEY = "sb_publishable_jykeA73vChjrKc4CeMI8TQ_uZuZXfYQ";
+
 export const useFasesHistorial = (cloudConfig) => {
   const registrarCambioFase = useCallback(async ({ tanqueId, faseAnterior, faseNueva, diasEnFase, loteId, usuarioEmail }) => {
     if (!cloudConfig || !cloudConfig.url || !cloudConfig.key) return false;
@@ -8,8 +10,8 @@ export const useFasesHistorial = (cloudConfig) => {
       const res = await fetch(cloudConfig.url + "/rest/v1/fases_historial", {
         method: "POST",
         headers: {
-          "apikey": cloudConfig.key,
-          "Authorization": "Bearer " + cloudConfig.key,
+          "apikey": PUBLISHABLE_KEY,
+          "Authorization": "Bearer " + PUBLISHABLE_KEY,
           "Content-Type": "application/json",
           "Prefer": "return=minimal",
         },
@@ -36,8 +38,8 @@ export const useFasesHistorial = (cloudConfig) => {
       const query = cloudConfig.url + "/rest/v1/fases_historial?tanque_id=eq." + encodeURIComponent(tanqueId) + "&order=fecha_cambio.desc&limit=50";
       const res = await fetch(query, {
         headers: {
-          "apikey": cloudConfig.key,
-          "Authorization": "Bearer " + cloudConfig.key,
+          "apikey": PUBLISHABLE_KEY,
+          "Authorization": "Bearer " + PUBLISHABLE_KEY,
         },
       });
       return await res.json();
@@ -53,8 +55,8 @@ export const useFasesHistorial = (cloudConfig) => {
       const query = cloudConfig.url + "/rest/v1/fases_historial?order=fecha_cambio.desc&limit=100";
       const res = await fetch(query, {
         headers: {
-          "apikey": cloudConfig.key,
-          "Authorization": "Bearer " + cloudConfig.key,
+          "apikey": PUBLISHABLE_KEY,
+          "Authorization": "Bearer " + PUBLISHABLE_KEY,
         },
       });
       return await res.json();
