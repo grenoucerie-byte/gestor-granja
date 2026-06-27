@@ -2182,7 +2182,8 @@ function App() {
             {/* Tarjeta: Incubadoras */}
             {(() => {
               const incubadoras = data.incubadoras || [];
-              const activas = incubadoras.filter(i => i.count > 0);
+              const tienesPuestas = (incId) => puestas.some(p => p.destino === incId);
+              const activas = incubadoras.filter(i => i.count > 0 || tienesPuestas(i.id));
               return (
                 <div style={{ background: "#fff", borderRadius: "12px", padding: "1rem 1.2rem", boxShadow: "var(--sombra)", border: "1px solid #eee" }}>
                   <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "#888", marginBottom: "0.5rem", fontWeight: "600" }}>🥚 Incubadoras</div>
@@ -2197,7 +2198,7 @@ function App() {
                     {incubadoras.map(i => (
                       <div key={i.id} style={{
                         width: "18px", height: "18px", borderRadius: "3px",
-                        background: i.count > 0 ? "var(--pistacho)" : "#eee",
+                        background: (i.count > 0 || tienesPuestas(i.id)) ? "var(--pistacho)" : "#eee",
                         title: i.id,
                       }} title={i.id} />
                     ))}
