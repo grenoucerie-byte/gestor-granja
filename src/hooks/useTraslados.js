@@ -56,13 +56,8 @@ export const useTraslados = ({
       return;
     }
 
-    if (origenGrupo === "renacuajos" || origenGrupo === "metamorfoseadas") {
-      setModalPesajeActivo({ origenCell, origenGrupo, destinoCell, destinoGrupo });
-      setPesajeForm({ gramosTotales: "", m1: "", m2: "", m3: "", motivo: "" });
-    } else {
-      setModalTrasladoEstandar({ origenCell, origenGrupo, destinoCell, destinoGrupo });
-      setTrasladoForm({ cantidad: 1, motivo: "", copiarTratamiento: true, copiarAlimentacion: true, sexo: "" });
-    }
+    setModalTrasladoEstandar({ origenCell, origenGrupo, destinoCell, destinoGrupo });
+    setTrasladoForm({ cantidad: 1, motivo: "", copiarTratamiento: true, copiarAlimentacion: true, sexo: "" });
     setTransferenciaActiva(null);
     setIsProcessing(false);
   }, [isProcessing, transferenciaActiva, data, setIsProcessing, setTransferenciaActiva,

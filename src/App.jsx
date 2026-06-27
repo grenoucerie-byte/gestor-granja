@@ -3451,7 +3451,7 @@ function App() {
                 </div>
               )}
 
-              <div className="modal-actions" style={{ display: "flex", gap: "1rem" }}>
+              <div className="modal-actions" style={{ display: "flex", gap: "0.7rem", flexWrap: "wrap" }}>
                 <button
                   className="btn-baja"
                   onClick={() => setModalTrasladoEstandar(null)}
@@ -3459,6 +3459,20 @@ function App() {
                 >
                   Cancelar
                 </button>
+                {(modalTrasladoEstandar.origenGrupo === "renacuajos" || modalTrasladoEstandar.origenGrupo === "metamorfoseadas") && (
+                  <button
+                    className="btn-puesta"
+                    onClick={() => {
+                      const m = modalTrasladoEstandar;
+                      setModalTrasladoEstandar(null);
+                      setModalPesajeActivo({ origenCell: m.origenCell, origenGrupo: m.origenGrupo, destinoCell: m.destinoCell, destinoGrupo: m.destinoGrupo });
+                      setPesajeForm({ gramosTotales: "", m1: "", m2: "", m3: "", motivo: trasladoForm.motivo || "" });
+                    }}
+                    style={{ flex: 1, background: "#f9a825", fontSize: "0.95rem" }}
+                  >
+                    ⚖️ Con Pesaje
+                  </button>
+                )}
                 <button
                   className="btn-puesta"
                   onClick={confirmarTrasladoEstandar}
