@@ -38,7 +38,7 @@ function App() {
     const saved = localStorage.getItem("grenoucerie_cloud_config");
     return saved ? JSON.parse(saved) : { url: "", key: "" };
   });
-  const { session, authLoading, authError, setAuthError, login, signup, logout, isAuthenticated } = useAuth(cloudConfig);
+  const { session, authLoading, authError, setAuthError, login, signup, logout, isAuthenticated, userRole, userEmail } = useAuth(cloudConfig);
 
   if (authLoading) {
     return (
@@ -64,12 +64,17 @@ function App() {
     );
   }
 
-  return <AppContent cloudConfig={cloudConfig} setCloudConfig={setCloudConfig} session={session} logout={logout} />;
+  return <AppContent cloudConfig={cloudConfig} setCloudConfig={setCloudConfig} session={session} logout={logout} userRole={userRole} userEmail={userEmail} />;
 }
 
-function AppContent({ cloudConfig, setCloudConfig, session, logout }) {
+function AppContent({ cloudConfig, setCloudConfig, session, logout, userRole, userEmail }) {
   const { isCloudConnected, setIsCloudConnected, isSyncing, setIsSyncing, cloudSaveError, setCloudSaveError, ubicacionIdCacheRef, headers: obtenerCabeceras, sbFetch } = useSupabase(session, cloudConfig);
   const { resolverUbicacionId, obtenerOCrearLote, actualizarLoteIdEnCenso, moverLoteCompleto, crearLoteHijoEnDestino, procesarTrasladoLote } = useLotes({ sbFetch, ubicacionIdCacheRef });
+  const { registrarAccion } = useAudit(cloudConfig, session);
+  const { registrarCambioFase, obtenerHistorial: obtenerHistorialFase } = useFasesHistorial(cloudConfig);
+  const { obtenerTareas, crearTarea, completarTarea, eliminarTarea, generarTareasPeriodicas } = useCalendario(cloudConfig, session);
+  const canEdit = userRole === "admin" || userRole === "veterinario" || userRole === "operario";
+  const canManageUsers = userRole === "admin";
 
   // Pestaña activa del gestor
   const [activeTab, setActiveTab] = useState("dashboard");

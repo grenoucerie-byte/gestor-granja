@@ -5,6 +5,7 @@ export const useAuth = (cloudConfig) => {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+  const [userRole, setUserRole] = useState("operario");
 
   const supabase = cloudConfig.url && cloudConfig.key
     ? getSupabaseClient(cloudConfig.url, cloudConfig.key)
@@ -18,14 +19,38 @@ export const useAuth = (cloudConfig) => {
 
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
+      if (s?.user) {
+        fetchUserRole(s.user.email);
+      }
       setAuthLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, s) => setSession(s)
+      (_event, s) => {
+        setSession(s);
+        if (s?.user) {
+          fetchUserRole(s.user.email);
+        } else {
+          setUserRole("operario");
+        }
+      }
     );
 
     return () => subscription.unsubscribe();
+  }, [supabase]);
+
+  const fetchUserRole = useCallback(async (email) => {
+    if (!supabase || !email) return;
+    try {
+      const { data } = await supabase
+        .from("usuarios")
+        .select("rol")
+        .eq("email", email)
+        .single();
+      if (data?.rol) setUserRole(data.role);
+    } catch {
+      setUserRole("operario");
+    }
   }, [supabase]);
 
   const login = useCallback(async (email, password) => {
@@ -50,6 +75,7 @@ export const useAuth = (cloudConfig) => {
     if (!supabase) return;
     await supabase.auth.signOut();
     setSession(null);
+    setUserRole("operario");
   }, [supabase]);
 
   return {
@@ -61,5 +87,7 @@ export const useAuth = (cloudConfig) => {
     signup,
     logout,
     isAuthenticated: !!session,
+    userRole,
+    userEmail: session?.user?.email || null,
   };
 };
