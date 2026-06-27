@@ -19,6 +19,9 @@ import { useBajas } from "./hooks/useBajas";
 import { useIncidencias } from "./hooks/useIncidencias";
 import { useTraslados } from "./hooks/useTraslados";
 import { useAuth } from "./hooks/useAuth";
+import { useAudit } from "./hooks/useAudit";
+import { useFasesHistorial } from "./hooks/useFasesHistorial";
+import { useCalendario } from "./hooks/useCalendario";
 import LoginPage from "./components/LoginPage";
 import CellModal from "./components/CellModal";
 import {
