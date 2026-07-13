@@ -11,9 +11,19 @@ export const useSupabase = () => {
   const [cloudSaveError, setCloudSaveError] = useState(null);
   const ubicacionIdCacheRef = useRef({});
 
+  // Token de sesion del usuario autenticado (useAuth). Mientras no haya
+  // sesion, se sigue usando la anon key como Authorization, igual que antes;
+  // en cuanto hay sesion, se usa el access_token para que Supabase reconozca
+  // las peticiones como "authenticated" (necesario para las politicas RLS
+  // restrictivas de sql/002_auth_rls.sql).
+  const sessionTokenRef = useRef(null);
+  const setSessionToken = useCallback((token) => {
+    sessionTokenRef.current = token || null;
+  }, []);
+
   const headers = useCallback(() => ({
     apikey: cloudConfig.key,
-    Authorization: `Bearer ${cloudConfig.key}`,
+    Authorization: `Bearer ${sessionTokenRef.current || cloudConfig.key}`,
     "Content-Type": "application/json",
   }), [cloudConfig.key]);
 
@@ -32,5 +42,6 @@ export const useSupabase = () => {
     cloudSaveError, setCloudSaveError,
     ubicacionIdCacheRef,
     headers, sbFetch,
+    setSessionToken,
   };
 };

@@ -50,3 +50,9 @@ read_excel.js
 test_section.jsx
 test_table.jsx
 *.xlsx
+
+# Copias de seguridad generadas por scripts/backup.mjs (contienen datos reales)
+backups/
+
+# Archivo temporal de diagnostico, seguro de borrar
+src/App_orig_check_tmp.jsx

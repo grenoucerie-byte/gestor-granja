@@ -11,6 +11,7 @@ import DashboardMetricas from "./components/DashboardMetricas";
 import { PRODUCTOS_DEFAULT, PLANES_FASE_DEFAULT, AREAS_PIZARRA, OBTENER_DATOS_DENSIDAD } from "./constants";
 import { normalizarId, lockIcon, lockClass, parseSubgrupos, serializeSubgrupos, normalizarFecha, getFechaHoyNorm, getFechaAyerNorm, parseCellId, esEventoNoTratamiento } from "./utils";
 import { useSupabase } from "./hooks/useSupabase";
+import { useAuth } from "./hooks/useAuth";
 import { usePizarra } from "./hooks/usePizarra";
 import { useLotes } from "./hooks/useLotes";
 import { useCloudSync } from "./hooks/useCloudSync";
@@ -31,7 +32,17 @@ import {
 } from "./gridStructures";
 
 function App() {
-  const { cloudConfig, setCloudConfig, isCloudConnected, setIsCloudConnected, isSyncing, setIsSyncing, cloudSaveError, setCloudSaveError, ubicacionIdCacheRef, headers: obtenerCabeceras, sbFetch } = useSupabase();
+  const { cloudConfig, setCloudConfig, isCloudConnected, setIsCloudConnected, isSyncing, setIsSyncing, cloudSaveError, setCloudSaveError, ubicacionIdCacheRef, headers: obtenerCabeceras, sbFetch, setSessionToken } = useSupabase();
+  const auth = useAuth(cloudConfig);
+  // Mantiene sincronizado el token que usan las llamadas REST a Supabase con
+  // la sesion de Supabase Auth actual (ver src/hooks/useSupabase.js).
+  useEffect(() => {
+    setSessionToken(auth.session?.access_token || null);
+  }, [auth.session, setSessionToken]);
+  // Campos del formulario de inicio de sesion (pestana Configuracion).
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
   const { resolverUbicacionId, obtenerOCrearLote, actualizarLoteIdEnCenso, moverLoteCompleto, crearLoteHijoEnDestino, procesarTrasladoLote } = useLotes({ sbFetch, ubicacionIdCacheRef });
 
   // Pestaña activa del gestor
@@ -328,6 +339,7 @@ function App() {
   const { syncInventarioNube, guardarTratamientoEnNube, guardarBajaEnNube, syncPlanesNube, cargarPlanesDesdeNube, cargarDatosDeLaNube, subirDatosLocalesALaNube } = useCloudSync({
     cloudConfig, isCloudConnected, setIsCloudConnected,
     setIsSyncing, setCloudSaveError,
+    isAuthenticated: auth.isAuthenticated,
     headers: obtenerCabeceras,
     data, puestas, tratamientos, incidencias, inventario,
     registrosAlimentacion, planesAlimentacion, planesTratamiento, planesFase, productosDisponibles,
@@ -2961,6 +2973,84 @@ function App() {
               />
             </div>
 
+            {/* Inicio de sesion: requerido para sincronizar con la nube compartida.
+                Solo aparece si ya hay URL y clave configuradas; si no las hay,
+                la app sigue funcionando en modo local sin pedir login. */}
+            {cloudConfig.url && cloudConfig.key && (
+              <div style={{
+                background: auth.isAuthenticated ? "#e8f5e9" : "#fdecea",
+                border: `1px solid ${auth.isAuthenticated ? "#a5d6a7" : "#f5b7b1"}`,
+                borderRadius: "10px",
+                padding: "1rem",
+                marginBottom: "1.2rem",
+              }}>
+                {auth.isAuthenticated ? (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.6rem" }}>
+                    <span style={{ color: "#2e7d32", fontSize: "0.9rem" }}>
+                      Sesion iniciada como <strong>{auth.userEmail}</strong>
+                    </span>
+                    <button
+                      onClick={() => auth.logout()}
+                      style={{ background: "#7f8c8d", color: "white", border: "none", borderRadius: "6px", padding: "0.4rem 0.8rem", cursor: "pointer", fontSize: "0.82rem" }}
+                    >
+                      Cerrar sesion
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <strong style={{ color: "#c0392b", display: "block", marginBottom: "0.5rem" }}>
+                      Inicia sesion para sincronizar con la nube
+                    </strong>
+                    <p style={{ fontSize: "0.82rem", color: "#555", margin: "0 0 0.7rem 0" }}>
+                      Usa la cuenta que se creo para ti en Supabase Authentication. Sin sesion, la app sigue funcionando con los datos guardados en este ordenador, pero no se sincroniza con la nube compartida.
+                    </p>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem", marginBottom: "0.6rem" }}>
+                      <input
+                        type="email"
+                        placeholder="tu-email@ejemplo.com"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "0.85rem" }}
+                      />
+                      <input
+                        type="password"
+                        placeholder="Contrasena"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        onKeyDown={async (e) => {
+                          if (e.key !== "Enter" || !loginEmail || !loginPassword) return;
+                          setLoginBusy(true);
+                          const ok = await auth.login(loginEmail, loginPassword);
+                          setLoginBusy(false);
+                          if (ok) setLoginPassword("");
+                        }}
+                        style={{ padding: "8px", borderRadius: "6px", border: "1px solid #ccc", fontSize: "0.85rem" }}
+                      />
+                    </div>
+                    {auth.authError && (
+                      <p style={{ color: "#c0392b", fontSize: "0.8rem", margin: "0 0 0.6rem 0" }}>{auth.authError}</p>
+                    )}
+                    <button
+                      onClick={async () => {
+                        if (!loginEmail || !loginPassword) {
+                          auth.setAuthError("Rellena email y contrasena.");
+                          return;
+                        }
+                        setLoginBusy(true);
+                        const ok = await auth.login(loginEmail, loginPassword);
+                        setLoginBusy(false);
+                        if (ok) setLoginPassword("");
+                      }}
+                      disabled={loginBusy}
+                      style={{ background: "#c0392b", color: "white", border: "none", borderRadius: "6px", padding: "0.5rem 1rem", cursor: "pointer", fontSize: "0.85rem", fontWeight: "bold" }}
+                    >
+                      {loginBusy ? "Entrando..." : "Iniciar sesion"}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
             <div
               style={{
                 display: "flex",
@@ -3007,6 +3097,12 @@ function App() {
                     if (!cloudConfig.url || !cloudConfig.key) {
                       alert(
                         "Por favor, rellena ambos campos para poder conectar.",
+                      );
+                      return;
+                    }
+                    if (!auth.isAuthenticated) {
+                      alert(
+                        "Inicia sesion primero (arriba) para poder conectar con la nube compartida.",
                       );
                       return;
                     }

@@ -11,6 +11,11 @@ import {
 export const useCloudSync = ({
   cloudConfig, isCloudConnected, setIsCloudConnected,
   setIsSyncing, setCloudSaveError,
+  // Si hay sesion de Supabase Auth activa. Por defecto true para no romper
+  // llamadas existentes (tests u otros consumidores) que no la pasen; en
+  // App.jsx si se pasa el valor real de useAuth().isAuthenticated, para que
+  // la sincronizacion con la nube compartida no arranque sin sesion.
+  isAuthenticated = true,
   headers: obtenerCabeceras,
   // State values (for persistence effects & reading current values)
   data, puestas, tratamientos, incidencias, inventario,
@@ -413,20 +418,25 @@ export const useCloudSync = ({
   }, [productosDisponibles]);
 
   // ─── Auto-load on mount ──────────────────────────────────────────────────────
+  // Requiere sesion autenticada ademas de tener la nube configurada: si el
+  // navegador ya tiene guardada una URL/clave de una sesion anterior pero el
+  // usuario no ha iniciado sesion en este dispositivo, no se descarga nada
+  // automaticamente (evita depender solo de la anon key para acceder a datos
+  // compartidos).
   useEffect(() => {
-    if (cloudConfig.url && cloudConfig.key) {
+    if (cloudConfig.url && cloudConfig.key && isAuthenticated) {
       cargarDatosDeLaNube();
       cargarPlanesDesdeNube();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAuthenticated]);
 
   // ─── Auto-refresh every 5 min (NANO instance can't handle 60s with 8 queries) ─
   useEffect(() => {
-    if (!isCloudConnected) return;
+    if (!isCloudConnected || !isAuthenticated) return;
     const intervalo = setInterval(() => { cargarDatosDeLaNube(); }, 300000);
     return () => clearInterval(intervalo);
-  }, [isCloudConnected, cargarDatosDeLaNube]);
+  }, [isCloudConnected, isAuthenticated, cargarDatosDeLaNube]);
 
   return {
     syncInventarioNube,
