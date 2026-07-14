@@ -21,6 +21,7 @@ import { useBajas } from "./hooks/useBajas";
 import { useIncidencias } from "./hooks/useIncidencias";
 import { useTraslados } from "./hooks/useTraslados";
 import { useHistorialCrecimiento } from "./hooks/useHistorialCrecimiento";
+import { parsearExcelRenacuajos, aplicarActualizacionesRenacuajos } from "./importRenacuajos";
 import {
   generarCeldasIncubadoras, asegurarEstructurasIncubadoras,
   generarCeldasGrid, asegurarEstructurasRenacuajos,
@@ -844,6 +845,49 @@ function App() {
     }
   };
 
+  // Importa el Excel "Control de Bañeras" que comparte quien lleva el día a
+  // día de los renacuajos. El Excel es la fuente de verdad: cada importación
+  // sobrescribe count/dose/pesoMedio/obs de las celdas que trae (el "Estado"
+  // libre se guarda en obs, ver importRenacuajos.js). El grid de renacuajos
+  // siempre tiene las 252 celdas ya creadas (generarCeldasGrid), así que
+  // nunca hace falta insertar celdas nuevas, solo actualizar in-place.
+  const ejecutarImportacionExcelRenacuajos = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const fileReader = new FileReader();
+    fileReader.readAsArrayBuffer(file);
+    fileReader.onload = async (event) => {
+      try {
+        const actualizaciones = parsearExcelRenacuajos(event.target.result);
+        const numCeldas = Object.keys(actualizaciones).length;
+        if (numCeldas === 0) {
+          alert("No se ha encontrado ninguna celda reconocible en el Excel (¿hojas 'Estructura N'?).");
+          return;
+        }
+
+        const censoActual = data.renacuajos || [];
+        const nuevoCenso = aplicarActualizacionesRenacuajos(censoActual, actualizaciones);
+
+        setData({ ...data, renacuajos: nuevoCenso });
+
+        if (isCloudConnected) {
+          for (const item of nuevoCenso) {
+            if (actualizaciones[item.id]) {
+              await syncInventarioNube(item);
+            }
+          }
+        }
+
+        alert(`¡Éxito! Se han actualizado ${numCeldas} celdas de renacuajos desde el Excel.`);
+      } catch (err) {
+        alert("Error al leer el Excel: " + err.message);
+        console.error(err);
+      }
+    };
+    e.target.value = "";
+  };
+
   const importarDatos = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1625,7 +1669,21 @@ function App() {
           >
             📥 Importar Triado
           </button>
-          
+
+          <label
+            className="btn-backup"
+            title="Importar Excel 'Control de Bañeras' de renacuajos"
+            style={{ cursor: "pointer" }}
+          >
+            🐸 Importar Excel Renacuajos
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={ejecutarImportacionExcelRenacuajos}
+              style={{ display: "none" }}
+            />
+          </label>
+
           <label
             className="btn-backup"
             title="Cargar copia de seguridad"
@@ -5494,7 +5552,6 @@ function App() {
                 onChange={e => setModalPuestaData(p => ({ ...p, fecha: e.target.value }))}
               />
             </div>
-
             {/* Fila 3: Incubadora destino */}
             <div className="input-group" style={{ marginBottom: "0.8rem" }}>
               <label>Incubadora de destino</label>
