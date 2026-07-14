@@ -8,8 +8,9 @@ import IncidenciasPanel from "./components/IncidenciasPanel";
 import TratamientosMasivos from "./components/TratamientosMasivos";
 import AlimentacionPanel from "./components/AlimentacionPanel";
 import DashboardMetricas from "./components/DashboardMetricas";
+import HistorialCrecimiento from "./components/HistorialCrecimiento";
 import { PRODUCTOS_DEFAULT, PLANES_FASE_DEFAULT, AREAS_PIZARRA, OBTENER_DATOS_DENSIDAD } from "./constants";
-import { normalizarId, lockIcon, lockClass, parseSubgrupos, serializeSubgrupos, normalizarFecha, getFechaHoyNorm, getFechaAyerNorm, parseCellId, esEventoNoTratamiento } from "./utils";
+import { normalizarId, lockIcon, lockClass, parseSubgrupos, serializeSubgrupos, normalizarFecha, getFechaHoyNorm, getFechaAyerNorm, parseCellId, esEventoNoTratamiento, construirNotaPeso } from "./utils";
 import { useSupabase } from "./hooks/useSupabase";
 import { useAuth } from "./hooks/useAuth";
 import { usePizarra } from "./hooks/usePizarra";
@@ -19,6 +20,7 @@ import { useTratamientos } from "./hooks/useTratamientos";
 import { useBajas } from "./hooks/useBajas";
 import { useIncidencias } from "./hooks/useIncidencias";
 import { useTraslados } from "./hooks/useTraslados";
+import { useHistorialCrecimiento } from "./hooks/useHistorialCrecimiento";
 import {
   generarCeldasIncubadoras, asegurarEstructurasIncubadoras,
   generarCeldasGrid, asegurarEstructurasRenacuajos,
@@ -44,6 +46,8 @@ function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
   const { resolverUbicacionId, obtenerOCrearLote, actualizarLoteIdEnCenso, moverLoteCompleto, crearLoteHijoEnDestino, procesarTrasladoLote } = useLotes({ sbFetch, ubicacionIdCacheRef });
+  const historialCrecimiento = useHistorialCrecimiento({ sbFetch, resolverUbicacionId });
+  const [mostrarHistorialCrecimiento, setMostrarHistorialCrecimiento] = useState(false);
 
   // Pestaña activa del gestor
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -53,6 +57,11 @@ function App() {
 
   // Celda seleccionada para el modal
   const [selectedCell, setSelectedCell] = useState(null);
+  // Al cambiar o cerrar la celda seleccionada, cerramos también el modal de
+  // histórico de crecimiento para no dejarlo abierto sobre la celda siguiente.
+  useEffect(() => {
+    setMostrarHistorialCrecimiento(false);
+  }, [selectedCell?.cell?.id]);
 
   const [data, setData] = useState(() => {
     const saved = localStorage.getItem("grenoucerie_data");
@@ -5300,6 +5309,44 @@ function App() {
                   </button>
                 )}
 
+                <button
+                  style={{
+                    background: "#556b2f",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    padding: "0.4rem 1rem",
+                  }}
+                  onClick={() => setMostrarHistorialCrecimiento(true)}
+                >
+                  📈 Ver histórico
+                </button>
+
+                <button
+                  style={{
+                    background: "#7f8c8d",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    padding: "0.4rem 1rem",
+                  }}
+                  onClick={() => {
+                    const nota = construirNotaPeso(modalPesoMedio);
+                    if (!nota) {
+                      alert("Introduce antes un peso medio válido (mayor que 0) en el campo de arriba.");
+                      return;
+                    }
+                    aplicarTratamiento(normalizarId(selectedCell.cell.id), "Registro de pesaje", "-", {
+                      categoria: "pesaje",
+                      notas: nota,
+                    });
+                  }}
+                >
+                  ⚖️ Registrar pesaje
+                </button>
+
                 <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                   {!(modalObs && modalObs.includes("[BLOQUEADO")) && (
                     <select
@@ -5351,6 +5398,16 @@ function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── MODAL HISTÓRICO DE CRECIMIENTO ───────────────────────── */}
+      {mostrarHistorialCrecimiento && selectedCell && (
+        <HistorialCrecimiento
+          tanqueId={normalizarId(selectedCell.cell.id)}
+          tratamientos={tratamientos}
+          historial={historialCrecimiento}
+          onClose={() => setMostrarHistorialCrecimiento(false)}
+        />
       )}
 
       {/* ── MODAL REGISTRO DE PUESTA ─────────────────────────────── */}

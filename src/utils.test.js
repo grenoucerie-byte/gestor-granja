@@ -4,6 +4,8 @@ import {
   parseSubgrupos, serializeSubgrupos,
   normalizarFecha, parseCellId, parseFechaTrat,
   esEventoNoTratamiento,
+  evaluarSemaforoClinico, construirBloqueSemaforo, extraerSemaforoDeNotas,
+  construirNotaPeso, extraerPesoDeNotas,
 } from "./utils";
 
 describe("normalizarId", () => {
@@ -144,3 +146,41 @@ describe("esEventoNoTratamiento", () => {
     expect(esEventoNoTratamiento({})).toBe(false);
   });
 });
+
+describe("semaforo clinico", () => {
+  it("marca NEGRO con signos neurologicos y caquexia", () => {
+    const r = evaluarSemaforoClinico({
+      bajasSemana: "3",
+      ojosVelados: "2",
+      rojeces: "0",
+      caquexia: "1",
+      circulos: "1",
+      distension: "0",
+      letargo: "1",
+      empeoran: "1",
+      tipoLote: "silvestre",
+    });
+    expect(r.nivel).toBe("NEGRO");
+    expect(r.severidad).toBe("Alta");
+    expect(r.score).toBeGreaterThanOrEqual(8);
+  });
+
+  it("construye y relee el bloque de notas del semaforo", () => {
+    const form = {
+      bajasSemana: "1",
+      ojosVelados: "2",
+      rojeces: "0",
+      caquexia: "0",
+      circulos: "0",
+      distension: "0",
+      letargo: "0",
+      empeoran: "0",
+      tipoLote: "silvestre",
+    };
+    const evalRes = evaluarSemaforoClinico(form);
+    const bloque = construirBloqueSemaforo(form, evalRes);
+    const parsed = extraerSemaforoDeNotas(`nota previa\n\n${bloque}`);
+    expect(parsed.nivel).toBe(evalRes.nivel);
+    expect(parsed.score).toBe(String(evalRes.score));
+    expect(parsed.lote).toBe("silvestre");
+    expect(parsed.ganadexil
