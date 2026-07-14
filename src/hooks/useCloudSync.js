@@ -269,7 +269,7 @@ export const useCloudSync = ({
       const hdrs = obtenerCabeceras();
 
       const resCensos = await fetch(`${config.url}/rest/v1/censos?select=*`, { headers: hdrs });
-      if (!resCensos.ok) throw new Error("Error al obtener censos");
+      if (!resCensos.ok) { const e = new Error("Error al obtener censos"); e.status = resCensos.status; throw e; }
       const censosNubeRaw = await resCensos.json();
 
       const censosNube = censosNubeRaw.map(c => ({
@@ -281,11 +281,11 @@ export const useCloudSync = ({
       }));
 
       const resPuestas = await fetch(`${config.url}/rest/v1/puestas?select=*&order=id.desc`, { headers: hdrs });
-      if (!resPuestas.ok) throw new Error("Error al obtener puestas");
+      if (!resPuestas.ok) { const e = new Error("Error al obtener puestas"); e.status = resPuestas.status; throw e; }
       const puestasNube = await resPuestas.json();
 
       const resTratamientos = await fetch(`${config.url}/rest/v1/tratamientos?select=*&order=id.desc`, { headers: hdrs });
-      if (!resTratamientos.ok) throw new Error("Error al obtener tratamientos");
+      if (!resTratamientos.ok) { const e = new Error("Error al obtener tratamientos"); e.status = resTratamientos.status; throw e; }
       const tratNube = await resTratamientos.json();
 
       let incidenciasNube = [];
@@ -382,7 +382,15 @@ export const useCloudSync = ({
     } catch (err) {
       console.error(err);
       setIsCloudConnected(false);
-      alert("No se pudo conectar a la base de datos de la nube. Detalle del error:\n\n" + (err.message || err) + "\n\nComprueba la URL y la Anon Key.");
+      const esErrorDeSesion = err && (err.status === 401 || err.status === 403);
+      if (esErrorDeSesion) {
+        alert(
+          "Tu sesión ha caducado o no tiene permiso para acceder a estos datos.\n\n" +
+          "Ve a la pestaña Configuración, cierra sesión y vuelve a iniciarla para reconectar con la nube."
+        );
+      } else {
+        alert("No se pudo conectar a la base de datos de la nube. Detalle del error:\n\n" + (err.message || err) + "\n\nComprueba la URL y la Anon Key.");
+      }
     } finally {
       setIsSyncing(false);
     }
