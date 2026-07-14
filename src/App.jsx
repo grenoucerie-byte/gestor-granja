@@ -180,6 +180,7 @@ function App() {
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [importandoExcelRenacuajos, setImportandoExcelRenacuajos] = useState(false);
   const [importModalText, setImportModalText] = useState("");
   const [importDestino, setImportDestino] = useState("renacuajos");
 
@@ -858,6 +859,7 @@ function App() {
     const fileReader = new FileReader();
     fileReader.readAsArrayBuffer(file);
     fileReader.onload = async (event) => {
+      setImportandoExcelRenacuajos(true);
       try {
         const actualizaciones = parsearExcelRenacuajos(event.target.result);
         const numCeldas = Object.keys(actualizaciones).length;
@@ -869,20 +871,39 @@ function App() {
         const censoActual = data.renacuajos || [];
         const nuevoCenso = aplicarActualizacionesRenacuajos(censoActual, actualizaciones);
 
+        // El Excel trae las 252 celdas del grid (incluidas las vacías), pero
+        // sincronizar las 252 contra Supabase una a una es lento y, si la
+        // página se recarga a medio camino, deja la importación a medias
+        // (algunas celdas actualizadas, otras no — el bug que reportó Pau
+        // con Estructura 1). Por eso solo se sincronizan las que realmente
+        // cambian de valor, y en lotes en paralelo en vez de una a una.
+        const cambiadas = nuevoCenso.filter((item, i) => {
+          const previo = censoActual[i];
+          if (!previo || previo.id !== item.id) return true;
+          return (
+            String(previo.count ?? "") !== String(item.count ?? "") ||
+            String(previo.dose ?? "") !== String(item.dose ?? "") ||
+            String(previo.pesoMedio ?? "") !== String(item.pesoMedio ?? "") ||
+            String(previo.obs ?? "") !== String(item.obs ?? "")
+          );
+        });
+
         setData({ ...data, renacuajos: nuevoCenso });
 
-        if (isCloudConnected) {
-          for (const item of nuevoCenso) {
-            if (actualizaciones[item.id]) {
-              await syncInventarioNube(item);
-            }
+        if (isCloudConnected && cambiadas.length > 0) {
+          const LOTE = 20;
+          for (let i = 0; i < cambiadas.length; i += LOTE) {
+            const lote = cambiadas.slice(i, i + LOTE);
+            await Promise.all(lote.map((item) => syncInventarioNube(item)));
           }
         }
 
-        alert(`¡Éxito! Se han actualizado ${numCeldas} celdas de renacuajos desde el Excel.`);
+        alert(`¡Éxito! ${cambiadas.length} celdas de renacuajos actualizadas desde el Excel (de ${numCeldas} celdas leídas).`);
       } catch (err) {
         alert("Error al leer el Excel: " + err.message);
         console.error(err);
+      } finally {
+        setImportandoExcelRenacuajos(false);
       }
     };
     e.target.value = "";
@@ -1673,13 +1694,17 @@ function App() {
           <label
             className="btn-backup"
             title="Importar Excel 'Control de Bañeras' de renacuajos"
-            style={{ cursor: "pointer" }}
+            style={{
+              cursor: importandoExcelRenacuajos ? "wait" : "pointer",
+              opacity: importandoExcelRenacuajos ? 0.6 : 1,
+            }}
           >
-            🐸 Importar Excel Renacuajos
+            {importandoExcelRenacuajos ? "⏳ Importando..." : "🐸 Importar Excel Renacuajos"}
             <input
               type="file"
               accept=".xlsx,.xls"
               onChange={ejecutarImportacionExcelRenacuajos}
+              disabled={importandoExcelRenacuajos}
               style={{ display: "none" }}
             />
           </label>
