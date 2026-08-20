@@ -234,3 +234,16 @@ export const extraerSemaforoDeNotas = (notas = "") => {
     ganadexil: leer("Ganadexil"),
   };
 };
+
+export const construirNotaPeso = (pesoMedio) => {
+  const p = parseFloat(pesoMedio);
+  if (!p || p <= 0) return "";
+  return `[PESO_MEDIO:${p}]`;
+};
+
+export const extraerPesoDeNotas = (notas = "") => {
+  const match = (notas || "").match(/\[PESO_MEDIO:([\d.]+)\]/);
+  if (!match) return null;
+  const peso = parseFloat(match[1]);
+  return peso > 0 ? peso : null;
+};

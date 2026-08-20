@@ -183,4 +183,38 @@ describe("semaforo clinico", () => {
     expect(parsed.nivel).toBe(evalRes.nivel);
     expect(parsed.score).toBe(String(evalRes.score));
     expect(parsed.lote).toBe("silvestre");
-    expect(parsed.ganadexil
+    expect(parsed.ganadexil.length).toBeGreaterThan(5);
+  });
+});
+
+describe("construirNotaPeso / extraerPesoDeNotas", () => {
+  it("construye una marca parseable a partir de un peso válido", () => {
+    expect(construirNotaPeso("0.0823")).toBe("[PESO_MEDIO:0.0823]");
+  });
+
+  it("no construye marca para pesos vacíos, cero o inválidos", () => {
+    expect(construirNotaPeso("")).toBe("");
+    expect(construirNotaPeso("0")).toBe("");
+    expect(construirNotaPeso("abc")).toBe("");
+    expect(construirNotaPeso(null)).toBe("");
+  });
+
+  it("relee el peso desde una nota que contiene la marca", () => {
+    expect(extraerPesoDeNotas("[PESO_MEDIO:1.25]")).toBe(1.25);
+  });
+
+  it("extrae la marca aunque haya otro texto alrededor", () => {
+    expect(extraerPesoDeNotas("Pesaje de rutina\n[PESO_MEDIO:0.077]\nsin incidencias")).toBe(0.077);
+  });
+
+  it("devuelve null si no hay marca o el valor no es válido", () => {
+    expect(extraerPesoDeNotas("")).toBeNull();
+    expect(extraerPesoDeNotas("sin marca de peso aquí")).toBeNull();
+    expect(extraerPesoDeNotas("[PESO_MEDIO:0]")).toBeNull();
+  });
+
+  it("es simétrica: construir y luego extraer devuelve el mismo número", () => {
+    const nota = construirNotaPeso("2.5");
+    expect(extraerPesoDeNotas(nota)).toBe(2.5);
+  });
+});
