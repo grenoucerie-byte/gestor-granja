@@ -57,3 +57,26 @@ export const useHistorialCrecimiento = ({ sbFetch, resolverUbicacionId }) => {
   // ((prev) => [nuevo, ...prev])), así que si dos pesajes son del mismo día
   // y solo se ordenara por fecha, el más nuevo quedaría antes que el más
   // viejo en la curva (orden "al revés").
+  const obtenerCurvaPeso = useCallback((tanqueId, tratamientos) => {
+    const idNorm = normalizarId(tanqueId);
+    return (tratamientos || [])
+      .filter((t) => normalizarId(t.tanque) === idNorm)
+      .map((t) => ({ fecha: t.fecha, hora: t.hora, peso: extraerPesoDeNotas(t.notas) }))
+      .filter((p) => p.peso !== null)
+      .sort((a, b) => {
+        const da = parseFechaTrat(a.fecha) || new Date(0);
+        const db = parseFechaTrat(b.fecha) || new Date(0);
+        const diff = da - db;
+        if (diff !== 0) return diff;
+        return parseHoraMinutos(a.hora) - parseHoraMinutos(b.hora);
+      });
+  }, []);
+
+  return {
+    historialMovimientos,
+    cargandoHistorial,
+    errorHistorial,
+    cargarMovimientosTanque,
+    obtenerCurvaPeso,
+  };
+};
