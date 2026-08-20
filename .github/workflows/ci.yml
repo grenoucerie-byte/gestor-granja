@@ -1,0 +1,50 @@
+name: CI gestor-granja
+
+# Se ejecuta en cada push a main y en cada pull request. El objetivo es cortar
+# el patron que describia el informe tecnico: "feature -> 3-4 fixes de urgencia
+# -> revert". Si los tests no pasan, se ve aqui antes de desplegar a la granja.
+#
+# Nota sobre por que esto corre en GitHub y no en local: en Windows, Vitest da
+# timeouts intermitentes y llega a reportar 5 tests en vez de 112, asi que la
+# suite local no sirve como red de seguridad fiable. En Linux no ocurre.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # ─── Bloqueantes: si fallan, el build se marca en rojo ───────────────
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # ─── Informativo: no bloquea (todavia) ───────────────────────────────
+      #
+      # Quedan 62 errores de lint heredados en el codigo vivo. Si se pusiera
+      # como bloqueante hoy, el CI estaria en rojo permanente desde el primer
+      # dia, y un rojo permanente enseña al equipo a ignorar el semaforo (que
+      # es justo lo que paso con el test roto de useCloudSync).
+      #
+      # Plan: ir bajando esos 62 a cero y entonces quitar el continue-on-error
+      # para que el lint tambien bloquee.
+      - name: Lint (informativo)
+        run: npm run lint
+        continue-on-error: true

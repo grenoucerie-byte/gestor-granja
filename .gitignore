@@ -56,3 +56,7 @@ backups/
 
 # Archivo temporal de diagnostico, seguro de borrar
 src/App_orig_check_tmp.jsx
+archivo/
+
+# Ficheros con credenciales sueltas en la carpeta del repo
+*toke*github*.txt
