@@ -517,3 +517,82 @@ describe("useCloudSync — subirDatosLocalesALaNube", () => {
     consoleSpy.mockRestore();
   });
 });
+
+// ─── censos con ID mal formado: se avisa, NUNCA se borran ───────────────────
+//
+// Regresion: antes cargarDatosDeLaNube lanzaba un DELETE automatico contra
+// la tabla censos por cada registro que los validadores consideraban
+// "corrupto". Un fallo en esos validadores podia destruir censo real sin
+// confirmacion ni forma de recuperarlo. Estos tests fijan el comportamiento
+// nuevo: normalizar en memoria y avisar, pero no borrar nada.
+
+describe("useCloudSync — censos con ID mal formado", () => {
+  const respuestasConIdMalFormado = () => [
+    okResponse([
+      { id: '" INC-1 "', grupo: "incubadoras", count: 40, last_date: "2026-08-20", type: "", dose: "", obs: "" },
+    ]),
+    okResponse([]), // puestas
+    okResponse([]), // tratamientos
+    okResponse([]), // incidencias
+    okResponse([]), // bajas
+    okResponse([]), // notas_pizarra
+    okResponse([]), // inventario
+    okResponse([]), // cargarPlanesDesdeNube
+  ];
+
+  it("no lanza ningun DELETE contra censos", async () => {
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const deps = quietDeps({ cloudConfig: { url: "https://test.supabase.co", key: "test-key" } });
+    respuestasConIdMalFormado().forEach((r) => mockFetch.mockResolvedValueOnce(r));
+
+    renderHook(() => useCloudSync(deps));
+    await act(async () => {});
+
+    const llamadasDelete = mockFetch.mock.calls.filter(
+      ([, opciones]) => opciones && opciones.method === "DELETE",
+    );
+    expect(llamadasDelete).toHaveLength(0);
+    consoleSpy.mockRestore();
+  });
+
+  it("avisa al usuario y deja claro que no se ha borrado nada", async () => {
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const setCloudSaveError = vi.fn();
+    const deps = quietDeps({
+      cloudConfig: { url: "https://test.supabase.co", key: "test-key" },
+      setCloudSaveError,
+    });
+    respuestasConIdMalFormado().forEach((r) => mockFetch.mockResolvedValueOnce(r));
+
+    renderHook(() => useCloudSync(deps));
+    await act(async () => {});
+
+    const avisos = setCloudSaveError.mock.calls
+      .map(([msg]) => msg)
+      .filter((msg) => typeof msg === "string" && msg.includes("mal formado"));
+    expect(avisos.length).toBeGreaterThan(0);
+    expect(avisos[0]).toMatch(/no se ha borrado nada/i);
+    expect(avisos[0]).toContain("INC-1");
+    consoleSpy.mockRestore();
+  });
+
+  it("sigue cargando los datos con el ID ya normalizado", async () => {
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const setData = vi.fn();
+    const deps = quietDeps({
+      cloudConfig: { url: "https://test.supabase.co", key: "test-key" },
+      setData,
+    });
+    respuestasConIdMalFormado().forEach((r) => mockFetch.mockResolvedValueOnce(r));
+
+    renderHook(() => useCloudSync(deps));
+    await act(async () => {});
+
+    expect(setData).toHaveBeenCalled();
+    const datosCargados = setData.mock.calls.at(-1)[0];
+    const inc1 = datosCargados.incubadoras.find((c) => c.id === "INC-1");
+    expect(inc1).toBeDefined();
+    expect(inc1.count).toBe(40);
+    consoleSpy.mockRestore();
+  });
+});

@@ -337,17 +337,27 @@ export const useCloudSync = ({
         invernadero: asegurarEstructurasInvernadero(censosNube.filter(c => c.grupo === "invernadero")),
       };
 
+      // Registros de censo cuyo ID viene mal formado (espacios, comillas o un
+      // numero suelto). Se normalizan EN MEMORIA para que la app pueda
+      // trabajar con ellos, pero NUNCA se borran de Supabase.
+      //
+      // Antes se lanzaba aqui un DELETE automatico y sin confirmacion contra
+      // la tabla censos. Eso significaba que un fallo en los validadores de
+      // estructura (asegurarEstructurasXxx) podia destruir censo real de
+      // forma silenciosa: el registro se borraba de la nube y, si nadie
+      // volvia a sincronizar, no habia forma de recuperarlo.
+      //
+      // Ahora solo se avisa: que lo revise una persona y decida.
       if (corruptos.length > 0) {
-        console.log("Registros corruptos identificados para eliminación en Supabase:", corruptos);
-        (async () => {
-          for (const item of corruptos) {
-            try {
-              const response = await fetch(`${config.url}/rest/v1/censos?id=eq.${encodeURIComponent(item.id)}`, { method: "DELETE", headers: hdrs });
-              if (response.ok) console.log(`Registro corrupto eliminado: ${item.id}`);
-              else console.warn(`Eliminación fallida para ${item.id}:`, response.status);
-            } catch (err) { console.error(`Error al eliminar corrupto ${item.id}:`, err); }
-          }
-        })();
+        const listado = corruptos.map((c) => `"${c.id}" (${c.grupo})`).join(", ");
+        console.warn(
+          `Censos con ID mal formado detectados. NO se ha borrado nada: ${listado}`,
+        );
+        setCloudSaveError(
+          `Aviso: ${corruptos.length} registro(s) de censo tienen el ID mal formado ` +
+          `y podrian aparecer duplicados: ${listado}. No se ha borrado nada; ` +
+          `revisalo en Supabase cuando puedas.`,
+        );
       }
 
       Object.keys(DEFAULT_DATA).forEach((k) => {
