@@ -10,7 +10,7 @@ import AlimentacionPanel from "./components/AlimentacionPanel";
 import DashboardMetricas from "./components/DashboardMetricas";
 import HistorialCrecimiento from "./components/HistorialCrecimiento";
 import { PRODUCTOS_DEFAULT, PLANES_FASE_DEFAULT, AREAS_PIZARRA, OBTENER_DATOS_DENSIDAD } from "./constants";
-import { normalizarId, lockIcon, lockClass, parseSubgrupos, serializeSubgrupos, normalizarFecha, getFechaHoyNorm, getFechaAyerNorm, parseCellId, esEventoNoTratamiento, construirNotaPeso } from "./utils";
+import { normalizarId, lockIcon, lockClass, parseSubgrupos, serializeSubgrupos, normalizarFecha, getFechaHoyNorm, getFechaAyerNorm, parseCellId, esEventoNoTratamiento, construirNotaPeso, INCIDENCIA_SEMAFORO_DEFAULTS } from "./utils";
 import { useSupabase } from "./hooks/useSupabase";
 import { useAuth } from "./hooks/useAuth";
 import { usePizarra } from "./hooks/usePizarra";
@@ -266,6 +266,10 @@ function App() {
     tratFrecuencia: "",
     severidad: "Media",
     notas: "",
+    // Sin esto los 8 campos del semaforo arrancan en undefined y React los
+    // trata como inputs no controlados hasta que alguien los toca ("changing
+    // an uncontrolled input to be controlled").
+    ...INCIDENCIA_SEMAFORO_DEFAULTS,
   });
   const [incidenciaCerrarId, setIncidenciaCerrarId] = useState(null);
   const [incidenciaNotasCierre, setIncidenciaNotasCierre] = useState("");

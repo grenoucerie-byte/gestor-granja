@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { evaluarSemaforoClinico, construirBloqueSemaforo } from "../utils";
 
 export const useIncidencias = ({
   isCloudConnected, cloudConfig, obtenerCabeceras, setCloudSaveError,
@@ -19,6 +20,9 @@ export const useIncidencias = ({
     const resumenTratamiento = tieneTratamiento
       ? `${form.tratCategoria}: ${form.tratProducto.trim()}${form.tratDosis ? ` (${form.tratDosis})` : ""}${form.tratFrecuencia ? ` · ${form.tratFrecuencia}` : ""}`
       : "";
+    const semaforo = evaluarSemaforoClinico(form);
+    const bloqueSemaforo = construirBloqueSemaforo(form, semaforo);
+    const notasFinales = [form.notas?.trim(), bloqueSemaforo].filter(Boolean).join("\n\n");
 
     const nuevaIncidencia = {
       id: Date.now(),
@@ -26,9 +30,13 @@ export const useIncidencias = ({
       agente_causante: form.agenteCausante.trim(),
       raceways_afectados: form.racewaysAfectados.trim(),
       tratamiento_aplicado: resumenTratamiento,
-      severidad: form.severidad || "Media",
+      // Manda lo que haya en el formulario: el panel ya lo mantiene
+      // sincronizado con la severidad que sugiere el semaforo, de modo que
+      // esto respeta la sugerencia por defecto pero permite que una persona
+      // la corrija antes de guardar.
+      severidad: form.severidad || semaforo.severidad || "Media",
       estado: "Abierta",
-      notas: form.notas || "",
+      notas: notasFinales,
       fecha_cierre: "",
     };
     setIncidencias((prev) => [nuevaIncidencia, ...prev]);
@@ -61,7 +69,7 @@ export const useIncidencias = ({
         await aplicarTratamiento(tanqueId, form.tratProducto.trim(), form.tratDosis || "-", {
           categoria: form.tratCategoria,
           frecuencia: form.tratFrecuencia || "",
-          notas: `Por incidencia: ${form.agenteCausante.trim()}`,
+          notas: `Por incidencia: ${form.agenteCausante.trim()} · Semáforo ${semaforo.nivel}`,
         });
       }
     }

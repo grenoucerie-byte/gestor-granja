@@ -129,7 +129,15 @@ export const INCIDENCIA_SEMAFORO_DEFAULTS = {
   tipoLote: "normal",
 };
 
-const numSemaforo = (value) => Number(value || 0);
+// Un campo del semaforo puede llegar vacio, con texto pegado por error o con
+// un negativo (los input type=number no impiden teclearlos). Number("abc") es
+// NaN, y cualquier comparacion con NaN es falsa, asi que sin este saneado un
+// dato raro daria score 0 -> VERDE: el semaforo fallaria hacia el lado
+// peligroso, diciendo que todo esta bien justo cuando no se le entiende.
+const numSemaforo = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
 
 export const evaluarSemaforoClinico = (form = {}) => {
   const f = {
@@ -144,6 +152,11 @@ export const evaluarSemaforoClinico = (form = {}) => {
     tipoLote: form.tipoLote || "normal",
   };
 
+  // Lotes que toleran peor el manejo y la sobrecarga terapeutica: las
+  // silvestres porque no estan habituadas, y las convalecientes porque vienen
+  // ya castigadas de una enfermedad o un tratamiento anterior.
+  const loteDelicado = f.tipoLote === "silvestre" || f.tipoLote === "convaleciente";
+
   let score = 0;
   if (f.bajasSemana >= 2) score += 2;
   if (f.bajasSemana >= 3) score += 1;
@@ -155,7 +168,7 @@ export const evaluarSemaforoClinico = (form = {}) => {
   if (f.distension > 0) score += 2;
   if (f.letargo > 0) score += 2;
   if (f.empeoran > 0) score += 2;
-  if (f.tipoLote === "silvestre" && f.ojosVelados > 0) score += 1;
+  if (loteDelicado && f.ojosVelados > 0) score += 1;
 
   let nivel = "VERDE";
   if (f.circulos > 0 || (f.caquexia > 0 && f.letargo > 0 && f.bajasSemana >= 2)) {
@@ -178,10 +191,20 @@ export const evaluarSemaforoClinico = (form = {}) => {
   }
 
   let ganadexil = "No necesario por ahora.";
-  if (f.rojeces > 0 || (f.bajasSemana >= 3 && f.empeoran > 0)) {
+  // Caso conflictivo: las rojeces apuntan a una infeccion que si se puede
+  // tratar, pero el cuadro NEGRO (circulos, o caquexia+letargo+bajas) pinta
+  // terminal. Antes ganaba la regla de las rojeces y la ficha decia "si
+  // valorar Ganadexil" justo debajo de "evitar sobrecarga terapeutica": dos
+  // consejos opuestos en la misma tarjeta. Ahora se nombra el conflicto en vez
+  // de resolverlo por orden de los if.
+  if (nivel === "NEGRO" && f.rojeces > 0) {
+    ganadexil = "Señales contradictorias: hay rojeces (posible infección tratable) junto a un cuadro que pinta terminal. Separa las afectadas y decide animal por animal; tratar el lote entero castigaría a las que ya están perdidas.";
+  } else if (f.rojeces > 0 || (f.bajasSemana >= 3 && f.empeoran > 0)) {
     ganadexil = "Sí valorar. Si se usa: 0,025 ml/L, 45 min, sin sal en el baño y con agua fresca.";
-  } else if (f.tipoLote === "silvestre" && f.ojosVelados > 0 && f.rojeces === 0) {
-    ganadexil = "No automático. En silvestres con ojos velados aislados, pensar primero en irritación/queratitis/estrés y evitar sobrecarga química.";
+  } else if (loteDelicado && f.ojosVelados > 0 && f.rojeces === 0) {
+    ganadexil = f.tipoLote === "silvestre"
+      ? "No automático. En silvestres con ojos velados aislados, pensar primero en irritación/queratitis/estrés y evitar sobrecarga química."
+      : "No automático. En un lote convaleciente, los ojos velados aislados pueden ser secuela del proceso anterior; evitar encadenar otro tratamiento.";
   } else if (f.caquexia > 0 || f.circulos > 0) {
     ganadexil = "Mucho cuidado. Si parece secuela, caquexia o terminalidad, puede castigar más que ayudar.";
   } else if (nivel === "AMARILLO") {
@@ -196,6 +219,8 @@ export const evaluarSemaforoClinico = (form = {}) => {
   if (f.caquexia > 0) razones.push("La caquexia apunta a animal crónico o descompensado.");
   if (f.circulos > 0) razones.push("Nadar en círculos = caso avanzado y preocupante.");
   if (f.tipoLote === "silvestre") razones.push("Al ser silvestres, toleran peor el manejo y la sobrecarga terapéutica.");
+  if (f.tipoLote === "convaleciente") razones.push("Lote convaleciente: viene ya castigado, aguanta peor otro tratamiento encima.");
+  if (nivel === "NEGRO" && f.rojeces > 0) razones.push("Conviven un signo tratable (rojeces) y otro terminal: decidir animal por animal.");
   razones.push(`Nivel final: ${nivel}`);
 
   return { nivel, severidad, score, accion, ganadexil, razones };
@@ -211,6 +236,12 @@ export const construirBloqueSemaforo = (form = {}, resultado = null) => {
     `Signos: bajas=${numSemaforo(form.bajasSemana)}, ojos=${numSemaforo(form.ojosVelados)}, rojeces=${numSemaforo(form.rojeces)}, caquexia=${numSemaforo(form.caquexia)}, círculos=${numSemaforo(form.circulos)}, distensión=${numSemaforo(form.distension)}, letargo=${numSemaforo(form.letargo)}, empeoran=${numSemaforo(form.empeoran)}`,
     `Acción: ${resultado.accion}`,
     `Ganadexil: ${resultado.ganadexil}`,
+    // El "por que" del nivel es lo mas util para quien revise la incidencia
+    // semanas despues. Se omiten las entradas de score y nivel porque ya van
+    // en sus propias lineas justo arriba.
+    `Motivos: ${(resultado.razones || [])
+      .filter((r) => !r.startsWith("Score clínico") && !r.startsWith("Nivel final"))
+      .join(" · ")}`,
     "[/SEMÁFORO CLÍNICO]",
   ];
   return partes.join("\n");
@@ -232,6 +263,7 @@ export const extraerSemaforoDeNotas = (notas = "") => {
     signos: leer("Signos"),
     accion: leer("Acción"),
     ganadexil: leer("Ganadexil"),
+    motivos: leer("Motivos"),
   };
 };
 

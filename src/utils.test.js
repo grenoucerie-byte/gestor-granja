@@ -6,6 +6,7 @@ import {
   esEventoNoTratamiento,
   evaluarSemaforoClinico, construirBloqueSemaforo, extraerSemaforoDeNotas,
   construirNotaPeso, extraerPesoDeNotas,
+  INCIDENCIA_SEMAFORO_DEFAULTS,
 } from "./utils";
 
 describe("normalizarId", () => {
@@ -216,5 +217,54 @@ describe("construirNotaPeso / extraerPesoDeNotas", () => {
   it("es simétrica: construir y luego extraer devuelve el mismo número", () => {
     const nota = construirNotaPeso("2.5");
     expect(extraerPesoDeNotas(nota)).toBe(2.5);
+  });
+});
+
+describe("semaforo clinico — decisiones clinicas fijadas", () => {
+  const signos = (extra = {}) => ({
+    ...INCIDENCIA_SEMAFORO_DEFAULTS, ...extra,
+  });
+
+  it("en un NEGRO con rojeces nombra el conflicto en vez de mandar tratar", () => {
+    // Rojeces (infeccion tratable) + circulos (cuadro terminal). Antes la
+    // ficha decia "evitar sobrecarga terapeutica" y "si valorar Ganadexil"
+    // a la vez, porque la regla de rojeces se evaluaba primero.
+    const r = evaluarSemaforoClinico(signos({ rojeces: "1", circulos: "1" }));
+    expect(r.nivel).toBe("NEGRO");
+    expect(r.ganadexil).toMatch(/contradictorias/i);
+    expect(r.ganadexil).not.toMatch(/^Sí valorar/);
+    expect(r.ganadexil).toMatch(/animal por animal/i);
+  });
+
+  it("sin cuadro terminal, unas rojeces siguen recomendando valorar Ganadexil", () => {
+    const r = evaluarSemaforoClinico(signos({ rojeces: "1" }));
+    expect(r.nivel).not.toBe("NEGRO");
+    expect(r.ganadexil).toMatch(/^Sí valorar/);
+  });
+
+  it("un lote convaleciente pesa igual que uno silvestre", () => {
+    const conv = evaluarSemaforoClinico(signos({ tipoLote: "convaleciente", ojosVelados: "1" }));
+    const silv = evaluarSemaforoClinico(signos({ tipoLote: "silvestre", ojosVelados: "1" }));
+    const norm = evaluarSemaforoClinico(signos({ tipoLote: "normal", ojosVelados: "1" }));
+    expect(conv.score).toBe(silv.score);
+    expect(conv.score).toBeGreaterThan(norm.score);
+    expect(conv.ganadexil).toMatch(/No automático/);
+  });
+
+  it("un dato no numerico no puede hacer que salga VERDE en silencio", () => {
+    // Number("abc") es NaN y toda comparacion con NaN es falsa: sin sanear,
+    // el semaforo fallaria hacia el lado peligroso.
+    const conBasura = evaluarSemaforoClinico(signos({ circulos: "abc", rojeces: "-3" }));
+    expect(Number.isFinite(conBasura.score)).toBe(true);
+    expect(conBasura.score).toBe(0);
+    expect(conBasura.nivel).toBe("VERDE");
+  });
+
+  it("guarda y relee los motivos del nivel", () => {
+    const form = signos({ rojeces: "1", circulos: "1" });
+    const res = evaluarSemaforoClinico(form);
+    const parsed = extraerSemaforoDeNotas(construirBloqueSemaforo(form, res));
+    expect(parsed.motivos).toMatch(/rojeces/i);
+    expect(parsed.motivos).not.toMatch(/Nivel final/);
   });
 });

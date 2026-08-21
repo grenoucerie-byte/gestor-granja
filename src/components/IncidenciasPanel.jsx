@@ -1,13 +1,35 @@
 import React from "react";
+import { INCIDENCIA_SEMAFORO_DEFAULTS, evaluarSemaforoClinico, extraerSemaforoDeNotas } from "../utils";
 
 function IncidenciasPanel({ incidencias, incidenciaForm, setIncidenciaForm, incidenciaCerrarId, setIncidenciaCerrarId, incidenciaNotasCierre, setIncidenciaNotasCierre, abrirIncidencia, cerrarIncidencia, borrarIncidencia, actualizarIncidencia, data }) {
     const abiertas = incidencias.filter((i) => i.estado !== "Cerrada");
     const cerradas = incidencias.filter((i) => i.estado === "Cerrada");
+    const previewSemaforo = evaluarSemaforoClinico(incidenciaForm);
+
+    // Al tocar cualquier signo se recalcula la severidad sugerida y se deja
+    // escrita en el propio desplegable. Antes el desplegable de Severidad se
+    // podia cambiar pero su valor se descartaba siempre al guardar (mandaba
+    // el del semaforo): un control visible que no hacia nada. Ahora el
+    // semaforo lo rellena y la persona conserva la ultima palabra si quiere
+    // apartarse de la sugerencia.
+    const actualizarSigno = (campo, valor) => {
+      setIncidenciaForm((f) => {
+        const siguiente = { ...f, [campo]: valor };
+        return { ...siguiente, severidad: evaluarSemaforoClinico(siguiente).severidad };
+      });
+    };
 
     const colorSeveridad = (sev) => {
       if (sev === "Alta") return { bg: "#fdecea", color: "#c0392b", border: "#f5b7b1" };
       if (sev === "Baja") return { bg: "#eaf4ea", color: "#27ae60", border: "#a9dfbf" };
       return { bg: "#fef9e7", color: "#d68910", border: "#f9e79f" }; // Media
+    };
+
+    const colorSemaforo = (nivel) => {
+      if (nivel === "NEGRO") return { bg: "#111", color: "#f5f5f5", border: "#444" };
+      if (nivel === "ROJO") return { bg: "#fdecea", color: "#c0392b", border: "#f5b7b1" };
+      if (nivel === "AMARILLO") return { bg: "#fef9e7", color: "#b9770e", border: "#f9e79f" };
+      return { bg: "#eaf4ea", color: "#1e8449", border: "#a9dfbf" };
     };
 
     const handleAbrir = async () => {
@@ -23,6 +45,7 @@ function IncidenciasPanel({ incidencias, incidenciaForm, setIncidenciaForm, inci
           tratFrecuencia: "",
           severidad: "Media",
           notas: "",
+          ...INCIDENCIA_SEMAFORO_DEFAULTS,
         });
       }
     };
@@ -30,6 +53,9 @@ function IncidenciasPanel({ incidencias, incidenciaForm, setIncidenciaForm, inci
     const Card = ({ inc }) => {
       const sev = colorSeveridad(inc.severidad);
       const cerrando = incidenciaCerrarId === inc.id;
+      const semaforo = extraerSemaforoDeNotas(inc.notas || "");
+      const semaColor = semaforo ? colorSemaforo(semaforo.nivel) : null;
+      const notasVisibles = (inc.notas || "").replace(/\[SEMÁFORO CLÍNICO\][\s\S]*?\[\/SEMÁFORO CLÍNICO\]/, '').trim();
       return (
         <div style={{
           background: "#fff", border: `1px solid ${sev.border}`, borderLeft: `4px solid ${sev.color}`,
@@ -42,6 +68,11 @@ function IncidenciasPanel({ incidencias, incidenciaForm, setIncidenciaForm, inci
                 <span style={{ background: sev.bg, color: sev.color, borderRadius: "4px", padding: "1px 7px", fontSize: "0.72rem", fontWeight: "bold" }}>
                   {inc.severidad}
                 </span>
+                {semaforo && (
+                  <span style={{ background: semaColor.bg, color: semaColor.color, border: `1px solid ${semaColor.border}`, borderRadius: "4px", padding: "1px 7px", fontSize: "0.72rem", fontWeight: "bold" }}>
+                    {semaforo.nivel}
+                  </span>
+                )}
                 <span style={{
                   background: inc.estado === "Cerrada" ? "#eaf4ea" : "#fdecea",
                   color: inc.estado === "Cerrada" ? "#27ae60" : "#c0392b",
@@ -62,9 +93,21 @@ function IncidenciasPanel({ incidencias, incidenciaForm, setIncidenciaForm, inci
                   💊 Tratamiento: {inc.tratamiento_aplicado}
                 </div>
               )}
-              {inc.notas && (
+              {semaforo && (
+                <div style={{ margin: "0.45rem 0", padding: "0.55rem 0.7rem", background: "#fafafa", border: "1px solid #eee", borderRadius: "8px" }}>
+                  <div style={{ fontSize: "0.8rem", color: "#333", marginBottom: "4px" }}><strong>Semáforo clínico:</strong> {semaforo.nivel} · Score {semaforo.score}</div>
+                  <div style={{ fontSize: "0.78rem", color: "#555", marginBottom: "4px" }}><strong>Acción:</strong> {semaforo.accion}</div>
+                  <div style={{ fontSize: "0.78rem", color: "#555" }}><strong>Ganadexil:</strong> {semaforo.ganadexil}</div>
+                  {semaforo.motivos && (
+                    <div style={{ fontSize: "0.76rem", color: "#777", marginTop: "4px" }}>
+                      <strong>Motivos:</strong> {semaforo.motivos}
+                    </div>
+                  )}
+                </div>
+              )}
+              {(semaforo || notasVisibles) && (
                 <div style={{ fontSize: "0.78rem", color: "#777", fontStyle: "italic" }}>
-                  💬 {inc.notas}
+                  💬 {notasVisibles || 'Sin notas adicionales'}
                 </div>
               )}
             </div>
@@ -134,6 +177,12 @@ function IncidenciasPanel({ incidencias, incidenciaForm, setIncidenciaForm, inci
                 <option value="Alta">Alta</option>
               </select>
             </div>
+            <div className="input-group">
+              <label>Semáforo sugerido</label>
+              <div style={{ padding: "0.55rem 0.7rem", borderRadius: "6px", border: `1px solid ${colorSemaforo(previewSemaforo.nivel).border}`, background: colorSemaforo(previewSemaforo.nivel).bg, minHeight: "42px", display: "flex", alignItems: "center", fontWeight: "bold", color: colorSemaforo(previewSemaforo.nivel).color }}>
+                {previewSemaforo.nivel} · Score {previewSemaforo.score}
+              </div>
+            </div>
             <div className="input-group" style={{ gridColumn: "span 2" }}>
               <label>Agente causante</label>
               <input type="text" placeholder="Ej: Bacteriosis (Aeromonas sp.), hongo, parásito..."
@@ -145,6 +194,74 @@ function IncidenciasPanel({ incidencias, incidenciaForm, setIncidenciaForm, inci
               <input type="text" placeholder="Ej: 2.1.3, 2.1.4, UCI-Cen-3..."
                 value={incidenciaForm.racewaysAfectados}
                 onChange={(e) => setIncidenciaForm((f) => ({ ...f, racewaysAfectados: e.target.value }))} />
+            </div>
+            <div className="input-group" style={{ gridColumn: "span 2" }}>
+              <label>Semáforo clínico rápido</label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.6rem" }}>
+                <div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#6b7300", marginBottom: "0.2rem" }}>Bajas/semana</div>
+                  <input type="number" min="0" value={incidenciaForm.bajasSemana}
+                    onChange={(e) => actualizarSigno("bajasSemana", e.target.value)} />
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#6b7300", marginBottom: "0.2rem" }}>Ojos velados</div>
+                  <input type="number" min="0" value={incidenciaForm.ojosVelados}
+                    onChange={(e) => actualizarSigno("ojosVelados", e.target.value)} />
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#6b7300", marginBottom: "0.2rem" }}>Rojeces / hemorragias</div>
+                  <input type="number" min="0" value={incidenciaForm.rojeces}
+                    onChange={(e) => actualizarSigno("rojeces", e.target.value)} />
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#6b7300", marginBottom: "0.2rem" }}>Caquexia</div>
+                  <input type="number" min="0" value={incidenciaForm.caquexia}
+                    onChange={(e) => actualizarSigno("caquexia", e.target.value)} />
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#6b7300", marginBottom: "0.2rem" }}>Nadan en círculos</div>
+                  <input type="number" min="0" value={incidenciaForm.circulos}
+                    onChange={(e) => actualizarSigno("circulos", e.target.value)} />
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#6b7300", marginBottom: "0.2rem" }}>Distensión</div>
+                  <input type="number" min="0" value={incidenciaForm.distension}
+                    onChange={(e) => actualizarSigno("distension", e.target.value)} />
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#6b7300", marginBottom: "0.2rem" }}>Letargo</div>
+                  <input type="number" min="0" value={incidenciaForm.letargo}
+                    onChange={(e) => actualizarSigno("letargo", e.target.value)} />
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#6b7300", marginBottom: "0.2rem" }}>Empeoran 24–48 h</div>
+                  <input type="number" min="0" value={incidenciaForm.empeoran}
+                    onChange={(e) => actualizarSigno("empeoran", e.target.value)} />
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#6b7300", marginBottom: "0.2rem" }}>Tipo de lote</div>
+                  <select value={incidenciaForm.tipoLote}
+                    onChange={(e) => actualizarSigno("tipoLote", e.target.value)}>
+                    <option value="normal">Lote normal</option>
+                    <option value="silvestre">Silvestre</option>
+                    <option value="convaleciente">Convaleciente</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ marginTop: "0.5rem", fontSize: "0.8rem", color: "#555" }}>
+                <strong>Acción sugerida:</strong> {previewSemaforo.accion}<br />
+                <strong>Ganadexil:</strong> {previewSemaforo.ganadexil}
+              </div>
+              {/* El "por que" del nivel: se calculaba desde el principio pero
+                  no se mostraba en ninguna parte, y es lo que permite decidir
+                  con criterio en vez de obedecer a un color. */}
+              {previewSemaforo.razones && previewSemaforo.razones.length > 0 && (
+                <ul style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem", fontSize: "0.78rem", color: "#666" }}>
+                  {previewSemaforo.razones.map((razon, i) => (
+                    <li key={i} style={{ marginBottom: "2px" }}>{razon}</li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div className="input-group" style={{ gridColumn: "span 2" }}>
               <label>Tratamiento a aplicar (opcional — se registrará en cada raceway afectado)</label>
