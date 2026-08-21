@@ -41,22 +41,72 @@ export const useConteosIA = ({ sbFetch, isCloudConnected }) => {
     }
   }, [sbFetch, isCloudConnected]);
 
-  const marcarRevisado = useCallback(async (id, estado, revisadoPor) => {
+  const marcarRevisado = useCallback(async (id, estado, revisadoPor, fuenteDefinitiva = null) => {
     const res = await sbFetch(`conteos_ia?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify({
         estado,
         revisado_por: revisadoPor || null,
         revisado_en: new Date().toISOString(),
+        // Queda registrado cual de las tres cifras se acepto, no solo que se
+        // acepto algo: es lo que permitira ver con el tiempo cual acierta mas.
+        fuente_definitiva: estado === "aplicado" ? fuenteDefinitiva : null,
       }),
     });
     if (!res || !res.ok) throw new Error("No se pudo actualizar la lectura.");
     setPendientes((prev) => prev.filter((p) => String(p.id) !== String(id)));
   }, [sbFetch]);
 
+  // Las tres estimaciones de cuantos animales hay, cada una por su lado.
+  //
+  // No se resuelven aqui: se devuelven las tres para que la persona que
+  // revisa vea en que se parecen y en que no, y elija. El sistema no decide
+  // cual es la buena.
+  //
+  // Ojo con la circularidad: el "peso medio usado" del bot suele salir de
+  // dividir la biomasa entre el conteo humano, asi que biomasa/peso_medio
+  // devuelve otra vez el conteo humano y no valida nada. La cifra
+  // independiente es la del muestreo (biomasa / peso_medio_muestreo).
+  const fuentesDe = useCallback((lectura) => {
+    const num = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+
+    const biomasa = num(lectura.biomasa_g);
+    const pesoMuestreo = num(lectura.peso_medio_muestreo);
+
+    const humano = num(lectura.conteo_humano);
+    const muestreo =
+      num(lectura.unidades_por_muestreo) ||
+      (biomasa && pesoMuestreo ? Math.round(biomasa / pesoMuestreo) : null);
+    const foto = num(lectura.conteo_foto);
+
+    const lista = [
+      { clave: "humano", etiqueta: "Operario", valor: humano, nota: lectura.operario || "" },
+      { clave: "muestreo", etiqueta: "Muestreo", valor: muestreo, nota: pesoMuestreo ? `${pesoMuestreo} g/ud` : "" },
+      { clave: "foto", etiqueta: "Visión", valor: foto, nota: "suele quedarse corta" },
+    ].filter((f) => f.valor !== null);
+
+    // Cuanto se separan entre si las cifras disponibles, en % sobre la menor.
+    let dispersion = null;
+    if (lista.length > 1) {
+      const valores = lista.map((f) => f.valor);
+      const min = Math.min(...valores);
+      const max = Math.max(...valores);
+      if (min > 0) dispersion = Math.round(((max - min) / min) * 1000) / 10;
+    }
+
+    // Sugerencia por defecto, no decision: se prefiere el muestreo por ser la
+    // unica independiente; si no lo hay, lo que dijo la persona.
+    const sugerida = muestreo !== null ? "muestreo" : humano !== null ? "humano" : foto !== null ? "foto" : null;
+
+    return { lista, dispersion, sugerida, humano, muestreo, foto };
+  }, []);
+
   // Une cada lectura con el censo que hay ahora mismo en esa bandeja, para
   // poder ensenar la diferencia antes de que nadie decida nada.
-  const compararConCenso = useCallback((lectura, data) => {
+  const compararConCenso = useCallback((lectura, data, unidadesElegidas = null) => {
     const idNorm = normalizarId(lectura.tanque_id);
     let actual = null;
     let grupo = null;
@@ -67,7 +117,10 @@ export const useConteosIA = ({ sbFetch, isCloudConnected }) => {
     });
 
     const countActual = actual ? parseInt(actual.count, 10) || 0 : null;
-    const propuesto = parseInt(lectura.unidades_calculadas, 10) || 0;
+    // Si quien revisa ha elegido una de las tres fuentes, manda esa.
+    const propuesto = unidadesElegidas != null
+      ? parseInt(unidadesElegidas, 10) || 0
+      : parseInt(lectura.unidades_calculadas, 10) || 0;
     const diferencia = countActual === null ? null : propuesto - countActual;
     const porcentaje =
       countActual === null || countActual === 0
@@ -85,5 +138,5 @@ export const useConteosIA = ({ sbFetch, isCloudConnected }) => {
     return { grupo, celdaActual: actual, countActual, propuesto, diferencia, porcentaje, desvioFoto };
   }, []);
 
-  return { pendientes, cargando, error, cargarPendientes, marcarRevisado, compararConCenso };
+  return { pendientes, cargando, error, cargarPendientes, marcarRevisado, compararConCenso, fuentesDe };
 };

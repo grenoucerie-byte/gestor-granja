@@ -1264,7 +1264,7 @@ function App() {
   // Al aplicarla se registra ademas un pesaje en el historial, de modo que la
   // medicion entra en la curva de crecimiento del tanque igual que si se
   // hubiera pesado a mano.
-  const resolverLecturaIA = async (lectura, comparacion, decision, revisadoPor) => {
+  const resolverLecturaIA = async (lectura, comparacion, decision, revisadoPor, fuenteElegida = null) => {
     if (decision === "aplicado") {
       const { grupo, countActual, propuesto } = comparacion;
       if (!grupo) {
@@ -1295,7 +1295,7 @@ function App() {
         fecha: new Date().toLocaleDateString("es-ES"),
         hora: new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
         tanque: id,
-        tipo: `Pesaje por visión (Total ahora: ${propuesto} ud${pesoMedio ? `, ${pesoMedio}g/ud` : ""})`,
+        tipo: `Pesaje por visión (Total ahora: ${propuesto} ud${pesoMedio ? `, ${pesoMedio}g/ud` : ""}${fuenteElegida ? `, según ${fuenteElegida}` : ""})`,
         dosis: lectura.biomasa_g != null ? String(lectura.biomasa_g) : "-",
         notas: [construirNotaPeso(pesoMedio), lectura.operario ? `Medido por ${lectura.operario}` : ""]
           .filter(Boolean).join(" "),
@@ -1317,7 +1317,7 @@ function App() {
     }
 
     try {
-      await conteosIA.marcarRevisado(lectura.id, decision, revisadoPor);
+      await conteosIA.marcarRevisado(lectura.id, decision, revisadoPor, fuenteElegida);
     } catch (err) {
       console.error("Error al marcar la lectura como revisada:", err);
       alert("Se aplicó el cambio, pero no se pudo marcar la lectura como revisada. Volverá a aparecer pendiente.");

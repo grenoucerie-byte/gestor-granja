@@ -17,6 +17,10 @@ const lectura = (extra = {}) => ({
   peso_medio_g: 0.304,
   unidades_calculadas: 240,
   conteo_foto: 185,
+  conteo_humano: 240,
+  muestreo_unidades: 30,
+  muestreo_gramos: 9,
+  peso_medio_muestreo: 0.3,
   estado: "pendiente",
   ...extra,
 });
@@ -132,5 +136,56 @@ describe("useConteosIA — compararConCenso", () => {
     expect(cmp.countActual).toBe(0);
     expect(cmp.diferencia).toBe(240);
     expect(cmp.porcentaje).toBeNull();
+  });
+});
+
+describe("useConteosIA — las tres fuentes se guardan por separado", () => {
+  const hook = () => renderHook(() => useConteosIA({ sbFetch: vi.fn(), isCloudConnected: true })).result;
+
+  it("no cae en el calculo circular: el muestreo sale del peso independiente", () => {
+    // El "peso medio usado" del bot (0.304) sale de 73/240, o sea del propio
+    // conteo humano: usarlo devolveria 240 otra vez y no validaria nada. La
+    // cifra independiente es 73 / 0.300 = 243.
+    const f = hook().current.fuentesDe(lectura());
+    expect(f.humano).toBe(240);
+    expect(f.muestreo).toBe(243);
+    expect(f.foto).toBe(185);
+  });
+
+  it("sugiere el muestreo por ser el unico independiente, sin imponerlo", () => {
+    expect(hook().current.fuentesDe(lectura()).sugerida).toBe("muestreo");
+  });
+
+  it("mide cuanto se separan las tres cifras entre si", () => {
+    // 185 (foto) frente a 243 (muestreo) = 31.4% sobre la menor.
+    const f = hook().current.fuentesDe(lectura());
+    expect(f.dispersion).toBeCloseTo(31.4, 1);
+  });
+
+  it("omite las fuentes que no vengan en la lectura", () => {
+    const f = hook().current.fuentesDe(lectura({ conteo_foto: null, conteo_humano: null }));
+    expect(f.lista.map((x) => x.clave)).toEqual(["muestreo"]);
+    expect(f.dispersion).toBeNull();
+  });
+
+  it("compara contra el censo usando la cifra que elige la persona", () => {
+    const r = hook().current;
+    const conMuestreo = r.compararConCenso(lectura(), censoConCelda(313), 243);
+    const conFoto = r.compararConCenso(lectura(), censoConCelda(313), 185);
+    expect(conMuestreo.propuesto).toBe(243);
+    expect(conMuestreo.diferencia).toBe(-70);
+    expect(conFoto.propuesto).toBe(185);
+    expect(conFoto.diferencia).toBe(-128);
+  });
+
+  it("registra que fuente se acepto al aplicar, y ninguna al descartar", async () => {
+    const sbFetch = vi.fn().mockResolvedValue(respuesta([]));
+    const { result } = renderHook(() => useConteosIA({ sbFetch, isCloudConnected: true }));
+
+    await act(async () => { await result.current.marcarRevisado(1, "aplicado", "paula@x.com", "muestreo"); });
+    expect(JSON.parse(sbFetch.mock.calls[0][1].body).fuente_definitiva).toBe("muestreo");
+
+    await act(async () => { await result.current.marcarRevisado(2, "descartado", "paula@x.com", "muestreo"); });
+    expect(JSON.parse(sbFetch.mock.calls[1][1].body).fuente_definitiva).toBeNull();
   });
 });

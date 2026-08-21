@@ -22,7 +22,27 @@ bandejas físicas, y ya discrepan. Para `E2-F7-C1`, la app dice 313 unidades y
 el bot 240. Con un solo censo (el de la app) y el bot aportando mediciones,
 eso desaparece.
 
-## Por qué manda el peso y no el conteo por foto
+## Hay tres cifras, y las tres hacen falta
+
+En vuestros propios mensajes conviven tres estimaciones distintas de cuántos
+animales hay:
+
+| Fuente | En el ejemplo real | De dónde sale |
+|---|---|---|
+| **Operario** | 240 ud | La *"cantidad fijada"* que pone la persona |
+| **Muestreo** | 243 ud | 73 g ÷ 0,300 g/ud — **la única independiente** |
+| **Visión** | 185 ud | El conteo por foto |
+
+Ojo con una trampa: el *"peso medio usado"* (0,304) sale de dividir la biomasa
+entre el conteo del operario (73 ÷ 240). Usarlo para calcular unidades es
+**circular**: devuelve otra vez 240 y no valida nada. La cifra que de verdad
+contrasta es la del muestreo independiente.
+
+Es justo la comprobación que el bot ya hacía cuando respondía *"los dos
+cálculos prácticamente coinciden: 0,304 frente a 0,300"*. Enviad las tres por
+separado y la app las enseña juntas para que una persona elija cuál aplicar.
+
+## Por qué el conteo por foto no puede ser el censo
 
 En las dos mediciones que tenemos, el conteo fotográfico se quedó corto:
 
@@ -72,7 +92,9 @@ Prefer: return=representation
 
   "biomasa_g": 73,
   "peso_medio_g": 0.304,
-  "unidades_calculadas": 240,
+  "unidades_calculadas": 243,
+  "conteo_humano": 240,
+  "unidades_por_muestreo": 243,
 
   "muestreo_unidades": 30,
   "muestreo_gramos": 9,
@@ -96,15 +118,19 @@ Prefer: return=representation
 | `operacion` | No | `censo` (por defecto), `entrada` o `salida`. |
 | `biomasa_g` | **Sí** | Gramos totales pesados. |
 | `peso_medio_g` | **Sí** | Gramos por unidad usados para el cálculo. |
-| `unidades_calculadas` | **Sí** | `biomasa_g / peso_medio_g`, redondeado. |
+| `conteo_humano` | Recomendado | La *"cantidad fijada"* por el operario. |
+| `unidades_por_muestreo` | **Muy recomendable** | `biomasa_g / peso_medio_muestreo`. La única estimación independiente del conteo humano. |
+| `unidades_calculadas` | **Sí** | La cifra que el bot considera más fiable de las tres. |
 | `muestreo_unidades` / `muestreo_gramos` / `peso_medio_muestreo` | Recomendado | El muestreo independiente. Es lo que permite detectar una báscula mal tarada. |
 | `conteo_foto` | Recomendado | Lo que contó la visión. **Contraste, no censo.** |
 | `fotos` | No | Lista de identificadores o URLs. |
 | `clave_idempotencia` | **Muy recomendable** | Valor estable y único por medición (p. ej. `telegram:<chat>:<mensaje>`). Si el bot reintenta, evita contar dos veces la misma bandeja. |
 | `payload_original` | Recomendado | El mensaje tal cual. Sirve para auditar de dónde salió un número. |
 
-**No enviéis** `estado`, `revisado_por` ni `revisado_en`: los gestiona la app
-cuando una persona valida la lectura.
+**No enviéis** `estado`, `revisado_por`, `revisado_en` ni `fuente_definitiva`:
+los gestiona la app cuando una persona valida la lectura. `fuente_definitiva`
+guarda cuál de las tres cifras se aceptó, lo que con el tiempo permitirá ver
+cuál acierta más.
 
 ## Qué NO hay que hacer
 
