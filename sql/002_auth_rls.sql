@@ -37,7 +37,10 @@ declare
     -- siguen accesibles con la anon key (restos de pruebas anteriores).
     -- Se cierran igualmente por seguridad, aunque esten sin uso.
     'audit_log', 'bloqueos', 'fases_historial', 'incidencias_sanitarias',
-    'productos', 'tareas_programadas', 'usuarios'
+    'productos', 'tareas_programadas', 'usuarios',
+    -- Buzon de lecturas del bot de vision (ver 003_conteos_ia.sql). Se
+    -- incluye aqui para que al re-ejecutar este script siga cerrada.
+    'conteos_ia'
   ];
 begin
   foreach tabla in array tablas loop

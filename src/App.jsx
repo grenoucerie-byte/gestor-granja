@@ -9,6 +9,7 @@ import TratamientosMasivos from "./components/TratamientosMasivos";
 import AlimentacionPanel from "./components/AlimentacionPanel";
 import DashboardMetricas from "./components/DashboardMetricas";
 import HistorialCrecimiento from "./components/HistorialCrecimiento";
+import ConteosIAPanel from "./components/ConteosIAPanel";
 import { PRODUCTOS_DEFAULT, PLANES_FASE_DEFAULT, AREAS_PIZARRA, OBTENER_DATOS_DENSIDAD } from "./constants";
 import { normalizarId, lockIcon, lockClass, parseSubgrupos, serializeSubgrupos, normalizarFecha, getFechaHoyNorm, getFechaAyerNorm, parseCellId, esEventoNoTratamiento, construirNotaPeso, INCIDENCIA_SEMAFORO_DEFAULTS } from "./utils";
 import { useSupabase } from "./hooks/useSupabase";
@@ -21,6 +22,7 @@ import { useBajas } from "./hooks/useBajas";
 import { useIncidencias } from "./hooks/useIncidencias";
 import { useTraslados } from "./hooks/useTraslados";
 import { useHistorialCrecimiento } from "./hooks/useHistorialCrecimiento";
+import { useConteosIA } from "./hooks/useConteosIA";
 import { parsearExcelRenacuajos, aplicarActualizacionesRenacuajos } from "./importRenacuajos";
 import {
   generarCeldasIncubadoras, asegurarEstructurasIncubadoras,
@@ -48,6 +50,7 @@ function App() {
   const [loginBusy, setLoginBusy] = useState(false);
   const { resolverUbicacionId, obtenerOCrearLote, actualizarLoteIdEnCenso, moverLoteCompleto, crearLoteHijoEnDestino, procesarTrasladoLote } = useLotes({ sbFetch, ubicacionIdCacheRef });
   const historialCrecimiento = useHistorialCrecimiento({ sbFetch, resolverUbicacionId });
+  const conteosIA = useConteosIA({ sbFetch, isCloudConnected });
   const [mostrarHistorialCrecimiento, setMostrarHistorialCrecimiento] = useState(false);
 
   // Pestaña activa del gestor
@@ -1254,6 +1257,73 @@ function App() {
     setSelectedCell(null);
   };
 
+  // Aplica (o descarta) una lectura del bot de vision. Solo se llama desde el
+  // boton que pulsa una persona en el panel de revision: el bot nunca escribe
+  // en el censo por su cuenta.
+  //
+  // Al aplicarla se registra ademas un pesaje en el historial, de modo que la
+  // medicion entra en la curva de crecimiento del tanque igual que si se
+  // hubiera pesado a mano.
+  const resolverLecturaIA = async (lectura, comparacion, decision, revisadoPor) => {
+    if (decision === "aplicado") {
+      const { grupo, countActual, propuesto } = comparacion;
+      if (!grupo) {
+        alert(`No se encuentra la bandeja "${lectura.tanque_id}" en el censo. Revisa el identificador.`);
+        return;
+      }
+      const confirmado = window.confirm(
+        `Aplicar la lectura al censo de ${lectura.tanque_id}?\n\n` +
+        `Ahora: ${countActual} ud\n` +
+        `Pasara a: ${propuesto} ud\n\n` +
+        `Se registrara tambien el pesaje (${lectura.peso_medio_g || "?"} g/ud) en el historial.`,
+      );
+      if (!confirmado) return;
+
+      const id = normalizarId(lectura.tanque_id);
+      const pesoMedio = lectura.peso_medio_g != null ? String(lectura.peso_medio_g) : "";
+
+      const newData = { ...data };
+      newData[grupo] = newData[grupo].map((item) =>
+        normalizarId(item.id).toLowerCase() === id.toLowerCase()
+          ? { ...item, count: propuesto, pesoMedio, lastDate: getFechaHoyNorm() }
+          : item,
+      );
+      setData(newData);
+
+      const registro = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        fecha: new Date().toLocaleDateString("es-ES"),
+        hora: new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
+        tanque: id,
+        tipo: `Pesaje por visión (Total ahora: ${propuesto} ud${pesoMedio ? `, ${pesoMedio}g/ud` : ""})`,
+        dosis: lectura.biomasa_g != null ? String(lectura.biomasa_g) : "-",
+        notas: [construirNotaPeso(pesoMedio), lectura.operario ? `Medido por ${lectura.operario}` : ""]
+          .filter(Boolean).join(" "),
+      };
+      setTratamientos((prev) => [registro, ...prev]);
+
+      if (isCloudConnected) {
+        try {
+          await syncInventarioNube({
+            id, grupo, count: propuesto,
+            peso_medio: pesoMedio,
+            last_date: getFechaHoyNorm(),
+          });
+          await guardarTratamientoEnNube(registro, "pesaje por visión");
+        } catch (err) {
+          console.error("Error al aplicar la lectura de visión en la nube:", err);
+        }
+      }
+    }
+
+    try {
+      await conteosIA.marcarRevisado(lectura.id, decision, revisadoPor);
+    } catch (err) {
+      console.error("Error al marcar la lectura como revisada:", err);
+      alert("Se aplicó el cambio, pero no se pudo marcar la lectura como revisada. Volverá a aparecer pendiente.");
+    }
+  };
+
   const actualizarBiomasa = (nuevosLotes) => {
     setBiomasaLotes(nuevosLotes);
     let totalUds = 0;
@@ -1835,6 +1905,13 @@ function App() {
           style={activeTab === "incidencias" ? {} : (incidencias.some(i => i.estado !== "Cerrada") ? { background: "#fdecea", color: "#c0392b" } : {})}
         >
           🚨 Incidencias{incidencias.filter(i => i.estado !== "Cerrada").length > 0 ? ` (${incidencias.filter(i => i.estado !== "Cerrada").length})` : ""}
+        </button>
+        <button
+          className={`nav-btn ${activeTab === "vision" ? "active" : ""}`}
+          onClick={() => setActiveTab("vision")}
+          style={activeTab === "vision" ? {} : (conteosIA.pendientes.length > 0 ? { background: "#eef5ff", color: "#2c5282" } : {})}
+        >
+          📷 Visión IA{conteosIA.pendientes.length > 0 ? ` (${conteosIA.pendientes.length})` : ""}
         </button>
         <button className={`nav-btn ${activeTab === "alimentacion" ? "active" : ""}`} onClick={() => setActiveTab("alimentacion")}
           style={activeTab === "alimentacion" ? {} : { background: "#e8f5e9", color: "#2e7d32" }}>
@@ -2629,6 +2706,25 @@ function App() {
             alarmasDesparasitacion={alarmasDesparasitacion} alarmas2aDosis={alarmas2aDosis}
             aplicarTratamientoMasivo={aplicarTratamientoMasivo}
             planesTratamiento={planesTratamiento} inventario={inventario}
+          />
+        </div>
+      )}
+
+      {activeTab === "vision" && (
+        <div className="tab-content" style={{ animation: "fadeIn 0.3s ease" }}>
+          <h2 style={{ fontSize: "1.1rem", color: "var(--oliva, #556b2f)", marginBottom: "0.3rem" }}>
+            📷 Lecturas del bot de visión
+          </h2>
+          <p style={{ fontSize: "0.82rem", color: "#777", marginTop: 0, marginBottom: "1rem" }}>
+            Pesajes enviados desde Telegram, pendientes de revisar. Nada se aplica
+            al censo hasta que alguien lo acepta aquí.
+          </p>
+          <ConteosIAPanel
+            conteosIA={conteosIA}
+            data={data}
+            onAplicar={resolverLecturaIA}
+            isCloudConnected={isCloudConnected}
+            usuarioActual={auth.userEmail || ""}
           />
         </div>
       )}
