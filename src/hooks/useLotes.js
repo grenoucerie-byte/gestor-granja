@@ -5,29 +5,39 @@ export const useLotes = ({ sbFetch, ubicacionIdCacheRef }) => {
   const resolverUbicacionId = useCallback(async (tanqueId) => {
     const codigo = normalizarId(tanqueId);
     if (!codigo) return null;
-    if (codigo in ubicacionIdCacheRef.current) return ubicacionIdCacheRef.current[codigo];
+    // Solo usar caché si el resultado es válido (no cachear fallos)
+    if (ubicacionIdCacheRef.current[codigo]) return ubicacionIdCacheRef.current[codigo];
     try {
       const res = await sbFetch(`ubicaciones?codigo=eq.${encodeURIComponent(codigo)}&select=id`);
-      if (!res || !res.ok) { ubicacionIdCacheRef.current[codigo] = null; return null; }
+      if (!res || !res.ok) return null;
       const rows = await res.json();
       if (rows[0]?.id) {
         ubicacionIdCacheRef.current[codigo] = rows[0].id;
         return rows[0].id;
       }
+      const tipoUbicacion = "engorde";
       const resCrear = await sbFetch("ubicaciones", {
         method: "POST",
         headers: { Prefer: "return=representation" },
-        body: JSON.stringify({ codigo, tipo_ubicacion: "engorde" }),
+        body: JSON.stringify({ codigo, tipo_ubicacion: tipoUbicacion }),
       });
       if (!resCrear || !resCrear.ok) {
+        // Puede que ya exista por concurrencia — intentar SELECT de rescate
+        const resRecheck = await sbFetch(`ubicaciones?codigo=eq.${encodeURIComponent(codigo)}&select=id`);
+        if (resRecheck && resRecheck.ok) {
+          const recheckRows = await resRecheck.json();
+          if (recheckRows[0]?.id) {
+            ubicacionIdCacheRef.current[codigo] = recheckRows[0].id;
+            return recheckRows[0].id;
+          }
+        }
         const errDetail = resCrear ? await resCrear.text().catch(() => "") : "sin respuesta";
         console.error(`No se pudo auto-crear ubicación "${codigo}" (${resCrear?.status}):`, errDetail);
-        ubicacionIdCacheRef.current[codigo] = null;
         return null;
       }
       const creados = await resCrear.json();
       const nuevoId = creados[0]?.id || null;
-      ubicacionIdCacheRef.current[codigo] = nuevoId;
+      if (nuevoId) ubicacionIdCacheRef.current[codigo] = nuevoId;
       return nuevoId;
     } catch (err) {
       console.error("Error al resolver ubicación:", err);
