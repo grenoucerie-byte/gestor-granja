@@ -200,7 +200,12 @@ export const evaluarSemaforoClinico = (form = {}) => {
   if (nivel === "NEGRO" && f.rojeces > 0) {
     ganadexil = "Señales contradictorias: hay rojeces (posible infección tratable) junto a un cuadro que pinta terminal. Separa las afectadas y decide animal por animal; tratar el lote entero castigaría a las que ya están perdidas.";
   } else if (f.rojeces > 0 || (f.bajasSemana >= 3 && f.empeoran > 0)) {
-    ganadexil = "Sí valorar. Si se usa: 0,025 ml/L, 45 min, sin sal en el baño y con agua fresca.";
+    // Dos dosis para dos momentos distintos, no una alternativa a la otra:
+    // 0,025 es la de ataque y 0,0125 la de refuerzo, que es la que se usa
+    // tambien en los ultimos dias cuando ya se aprecia mejoria. La ficha solo
+    // nombraba la de ataque, asi que quien la leyera no tenia forma de saber
+    // que al remitir el cuadro hay que bajar a la mitad.
+    ganadexil = "Sí valorar. Ataque: 0,025 ml/L, 45 min, sin sal en el baño y con agua fresca. Refuerzo, o últimos días si se percibe mejoría: 0,0125 ml/L.";
   } else if (loteDelicado && f.ojosVelados > 0 && f.rojeces === 0) {
     ganadexil = f.tipoLote === "silvestre"
       ? "No automático. En silvestres con ojos velados aislados, pensar primero en irritación/queratitis/estrés y evitar sobrecarga química."

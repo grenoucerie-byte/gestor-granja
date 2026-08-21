@@ -268,3 +268,16 @@ describe("semaforo clinico — decisiones clinicas fijadas", () => {
     expect(parsed.motivos).not.toMatch(/Nivel final/);
   });
 });
+
+describe("semaforo clinico — pauta de Ganadexil", () => {
+  it("nombra la dosis de ataque y la de refuerzo, que son fases distintas", () => {
+    // 0,025 es la de ataque; 0,0125 la de refuerzo y la de los ultimos dias
+    // si se percibe mejoria. Antes solo figuraba la primera, asi que quien
+    // leyera la ficha no sabia que al remitir el cuadro hay que bajar.
+    const r = evaluarSemaforoClinico({ ...INCIDENCIA_SEMAFORO_DEFAULTS, rojeces: "1" });
+    expect(r.ganadexil).toContain("0,025");
+    expect(r.ganadexil).toContain("0,0125");
+    expect(r.ganadexil).toMatch(/ataque/i);
+    expect(r.ganadexil).toMatch(/refuerzo/i);
+  });
+});
